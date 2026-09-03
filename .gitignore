@@ -12,6 +12,16 @@ dist
 dist-ssr
 *.local
 
+# Environment files — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Migration exports/snapshots — never commit customer data
+migration/exports/
+*.dump
+*.sql.gz
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
