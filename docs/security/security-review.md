@@ -15,7 +15,7 @@ MEDIUM — should fix · LOW — hygiene/informational
 
 | ID | Severity | Finding | Status | Owner | Notes |
 | --- | --- | --- | --- | --- | --- |
-| C1 | CRITICAL | Hardcoded Freebuff email API key in `auth/emailOtp.ts` | OPEN — fix in Phase 0/4 | eng | Rotate key; move to `process.env` |
+| C1 | CRITICAL | Hardcoded Freebuff email API key in `auth/emailOtp.ts` | **PARTIAL — source fixed 2026-09-03**; external rotation STILL REQUIRED | eng/account owner | Moved to `process.env`; see `docs/security/credential-rotation-required.md` — do not mark resolved until the key is rotated/revoked |
 | C2 | CRITICAL | No test suite | OPEN — Phase 0+ | eng | vitest + RLS tests + E2E gates |
 | H1 | HIGH | Delivery OTP stored plaintext | OPEN — Phase 8 | eng | Hash at migration import |
 | H2 | HIGH | OTP generated with `Math.random` | OPEN — Phase 8 | eng | CSPRNG |
@@ -27,7 +27,7 @@ MEDIUM — should fix · LOW — hygiene/informational
 | M3 | MEDIUM | No rate limiting | OPEN — Phases 4/10 | eng | Edge Function limits |
 | M4 | MEDIUM | Admin queries materialise large sets | OPEN — Phase 14 | eng | SQL pagination |
 | M5 | MEDIUM | users.email not unique in Convex | OPEN — Phase 3 | eng | partial UNIQUE in Postgres |
-| M6 | MEDIUM | Share-link pre-acceptance exposure | OPEN — review | product | acceptable by design; rate-limit detail |
+| M6 | MEDIUM | Share-link pre-acceptance exposure | **CLOSED 2026-09-04 (Supabase path)** | eng | Invite visibility now requires slug possession via `public.get_transaction_by_slug()` (migration 0003); RLS lists exclude unaccepted transactions; rate-limit detail remains for the Edge path |
 | L1–L7 | LOW | Hygiene items (see pre-migration review) | OPEN — as phases allow | eng | — |
 
 ## Phase review log
@@ -35,6 +35,7 @@ MEDIUM — should fix · LOW — hygiene/informational
 | Date | Phase / scope | Skills applied | Result | Blocker? |
 | --- | --- | --- | --- | --- |
 | 2026-09-03 | Pre-migration audit | security, ecommerce-engineering | 2 CRITICAL, 5 HIGH, 6 MEDIUM, 7 LOW | yes — C1, C2 |
+| 2026-09-04 | Phase 2 migration review (0001–0006) | security, ecommerce-engineering | 3 CRITICAL design defects found & fixed BEFORE any apply (invite RLS hole, missing schema USAGE, default PUBLIC EXECUTE on SECURITY DEFINER financial functions); hardening migration 0007 | yes — target hosted dev project unconfirmed; no DB to run tests against yet |
 | — | Phase 4 (auth) | security, session-security | pending | — |
 | — | Phase 5 (RLS) | security | pending | — |
 | — | Phase 10 (payments) | security, ecommerce-engineering | pending | — |
@@ -47,9 +48,11 @@ MEDIUM — should fix · LOW — hygiene/informational
 The 12 required negative tests (buyer-A/B isolation, no payment-event
 inserts, no client settlement/refund, audit-log isolation, no role grants,
 no self-promotion, staff least-privilege, anonymous enumeration) are
-specified in `docs/architecture/database-boundaries.md`. Status: **not yet
-implemented** — automated suite lands in Phase 5 and is re-run after every
-sensitive phase.
+specified in `docs/architecture/database-boundaries.md`. Status: **suite
+authored** (`supabase/tests/rls_authorization.sql`, transactional psql
+script covering the positive/negative matrix incl. an invite-hole regression
+test) — **not yet executed**: needs a migrated DEVELOPMENT database (local or
+hosted). Re-run after every sensitive phase.
 
 ## Recurring checks per phase
 

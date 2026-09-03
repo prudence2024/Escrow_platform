@@ -15,6 +15,15 @@ date, scope, skills read, how applied, outputs.
 | Legal/compliance | `legal-business` (SKILL.md) | Issue-spotting process; labelled open questions; no legal advice represented as such | `docs/legal-compliance-questions.md` |
 | Process | `ai-assisted-engineering`, `context-engineering` (SKILL.md) | Structured decomposition, provenance of findings (verified vs assumed) | this run's docs |
 
+## 2026-09-04 — Phase 2: hosted-Supabase switch, migration review (this run)
+
+| Scope | Skills applied | How applied | Outputs |
+| --- | --- | --- | --- |
+| DB/RLS design review | `security` (production-foundations.md), `ecommerce-engineering` (SKILL.md) | Reviewed all six Phase-2 migrations against DB design + RLS + money + idempotency controls before any apply; found + fixed 3 CRITICAL defects (invite-visibility RLS hole, missing schema USAGE for RLS helpers, default PUBLIC function EXECUTE on SECURITY DEFINER financial functions); wrote hardening migration 0007 (grant scoping, anon revokes, column-limited self-updates) | `supabase/migrations/20260903000001…07`, `docs/architecture/hosted-supabase-development.md` |
+| RLS negative testing | `security` (authorization), `system-breaker` (negative-test mindset) | Authored positive/negative RLS suite (stranger isolation, impersonation, role escalation, anon enumeration, invite RPC scoping, staff boundaries) as a transactional psql script for the completion gate | `supabase/tests/rls_authorization.sql` |
+| Auth | `security`, `session-security` (planning for hosted dev) | Confirmed Supabase Auth for all users incl. dev email flow; compromised Freebuff email key NOT reused | hosted-supabase-development.md |
+| Safety review | `security` (hosted-DB safety) | No destructive/remote actions taken; link + push deliberately withheld until the target development project is confirmed by the account owner (noted as blocker) | this run's report |
+
 ## Planned future usage (map to phases)
 
 | Phase | Skills to apply |
