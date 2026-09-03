@@ -15,8 +15,10 @@ inspection + local baseline runs.
 ## CRITICAL
 
 ### C1 — Hardcoded email API key committed to source
-- Location: `src/convex/auth/emailOtp.ts` — `"x-api-key":
-  "fb_email_2crN1hqIArZP2bEfvjp5Qik4"` (Freebuff `send_otp`).
+- Location: `src/convex/auth/emailOtp.ts` — a Freebuff `send_otp` API key
+  (prefix `fb_email_…`, value redacted here) was hardcoded in the
+  `x-api-key` header. See `docs/security/credential-rotation-required.md`
+  for rotation evidence and remediation status.
 - Evidence: confirmed (repository inspection).
 - Impact: anyone with repo access can send OTP emails through the Freebuff
   endpoint (spam/abuse, quota exhaustion, and the key is effectively leaked
