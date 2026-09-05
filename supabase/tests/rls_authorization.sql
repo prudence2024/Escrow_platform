@@ -230,8 +230,8 @@ reset role;
 -- ---------------------------------------------------------------------------
 -- 5. OWN-ONLY: notifications visible only to their owner
 -- ---------------------------------------------------------------------------
--- create one notification for demo as the trusted role
-select set_config('request.jwt.claims', '{}', false);
+-- create one notification for demo as the table owner (no INSERT grant exists
+-- for anon/authenticated by design — notifications are server-side only)
 insert into public.notifications (profile_id, type, title)
 select id, 'TEST', 'hello' from public.profiles where email = 'demo@dealsure.dev';
 
@@ -281,6 +281,8 @@ reset role;
 -- ---------------------------------------------------------------------------
 -- 6. STATE MACHINE (trusted path): valid transition works, invalid raises
 -- ---------------------------------------------------------------------------
+-- Runs as the migration runner role (a member of dealsure_owner via migration
+-- 0001's self-grant), exercising the trusted write path the server layer uses.
 do $$
 begin
   perform internal.transition_transaction(
