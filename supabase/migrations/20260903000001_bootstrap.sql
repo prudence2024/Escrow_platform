@@ -19,6 +19,12 @@ begin
 end
 $$;
 
+-- The hosted Supabase migration runner (postgres) is a superuser, so ALTER
+-- ... OWNER TO needs no extra role membership here. (The local `supabase start`
+-- dev image runs postgres as a restricted role and would need a one-off
+-- `grant dealsure_owner to postgres` before replaying migrations locally — see
+-- docs/architecture/database-ownership-decision.md. No Docker-only hack is
+-- retained in source.)
 alter schema internal owner to dealsure_owner;
 
 -- ---------------------------------------------------------------------------
@@ -49,19 +55,33 @@ alter table internal.audit_logs owner to dealsure_owner;
 create or replace function internal.audit_logs_append_only()
 returns trigger language plpgsql as $$
 begin
-  if tg_op in ('UPDATE', 'DELETE', 'TRUNCATE') then
+  if tg_op in ('UPDATE', 'DELETE') then
     raise exception 'audit_logs is append-only';
   end if;
   return new;
 end;
 $$;
 
+-- TRUNCATE only fires statement-level triggers, so it needs a separate one.
+create or replace function internal.audit_logs_no_truncate()
+returns trigger language plpgsql as $$
+begin
+  raise exception 'audit_logs is append-only';
+end;
+$$;
+
 drop trigger if exists trg_audit_logs_append_only on internal.audit_logs;
 create trigger trg_audit_logs_append_only
-  before insert or update or delete or truncate on internal.audit_logs
+  before insert or update or delete on internal.audit_logs
   for each row execute function internal.audit_logs_append_only();
 
+drop trigger if exists trg_audit_logs_no_truncate on internal.audit_logs;
+create trigger trg_audit_logs_no_truncate
+  before truncate on internal.audit_logs
+  for each statement execute function internal.audit_logs_no_truncate();
+
 alter function internal.audit_logs_append_only() owner to dealsure_owner;
+alter function internal.audit_logs_no_truncate() owner to dealsure_owner;
 
 -- ---------------------------------------------------------------------------
 -- internal.append_audit — the only sanctioned audit writer (SECURITY DEFINER)

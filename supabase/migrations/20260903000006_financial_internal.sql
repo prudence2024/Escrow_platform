@@ -147,19 +147,33 @@ create constraint trigger trg_ledger_balance
 create or replace function internal.ledger_entries_append_only()
 returns trigger language plpgsql as $$
 begin
-  if tg_op in ('UPDATE', 'DELETE', 'TRUNCATE') then
+  if tg_op in ('UPDATE', 'DELETE') then
     raise exception 'ledger_entries is append-only';
   end if;
   return new;
 end;
 $$;
 
+-- TRUNCATE only fires statement-level triggers, so it needs a separate one.
+create or replace function internal.ledger_entries_no_truncate()
+returns trigger language plpgsql as $$
+begin
+  raise exception 'ledger_entries is append-only';
+end;
+$$;
+
 drop trigger if exists trg_ledger_entries_append_only on internal.ledger_entries;
 create trigger trg_ledger_entries_append_only
-  before insert or update or delete or truncate on internal.ledger_entries
+  before insert or update or delete on internal.ledger_entries
   for each row execute function internal.ledger_entries_append_only();
 
+drop trigger if exists trg_ledger_entries_no_truncate on internal.ledger_entries;
+create trigger trg_ledger_entries_no_truncate
+  before truncate on internal.ledger_entries
+  for each statement execute function internal.ledger_entries_no_truncate();
+
 alter function internal.ledger_entries_append_only() owner to dealsure_owner;
+alter function internal.ledger_entries_no_truncate() owner to dealsure_owner;
 
 -- Post a balanced pair (SECURITY DEFINER — used by Edge Functions and tests).
 create or replace function internal.post_double_entry(
