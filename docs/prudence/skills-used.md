@@ -24,6 +24,14 @@ date, scope, skills read, how applied, outputs.
 | Auth | `security`, `session-security` (planning for hosted dev) | Confirmed Supabase Auth for all users incl. dev email flow; compromised Freebuff email key NOT reused | hosted-supabase-development.md |
 | Safety review | `security` (hosted-DB safety) | No destructive/remote actions taken; link + push deliberately withheld until the target development project is confirmed by the account owner (noted as blocker) | this run's report |
 
+## 2026-09-05 — Pre-push migration re-review (this run)
+
+| Scope | Skills applied | How applied | Outputs |
+| --- | --- | --- | --- |
+| Migration portability re-review | `security` (production-foundations.md), `ecommerce-engineering` (SKILL.md) | Re-read migrations 0001–0007 end-to-end before any remote push; verified TRUNCATE guards are statement-level (the only supported form); removed the Docker-only `grant dealsure_owner to postgres` hack (hosted runner is superuser; no Docker hacks kept in source); re-verified the five previously fixed issues (no pending-tx enumeration, slug-as-capability invite, RLS helper USAGE, no PUBLIC execute on privileged functions, anon surface = invite RPC + terms) | `docs/architecture/database-ownership-decision.md`, edits to migration 0001 |
+| Ownership model | `security` (ownership/definer guidance) | Decided to keep the NOLOGIN `dealsure_owner` role (SECURITY DEFINER blast radius below superuser) over collapsing onto `postgres`; documented rationale, alternatives, and the local-replay operational step | `docs/architecture/database-ownership-decision.md` |
+| Env safety | `security` (secrets) | `.env.example` now carries `VITE_SUPABASE_PUBLISHABLE_KEY` (browser-safe modern name) with legacy `VITE_SUPABASE_ANON_KEY` as a temporary alias; server secrets remain server-only | `.env.example` |
+
 ## Planned future usage (map to phases)
 
 | Phase | Skills to apply |
