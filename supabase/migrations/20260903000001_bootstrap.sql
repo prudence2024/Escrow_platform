@@ -19,12 +19,17 @@ begin
 end
 $$;
 
--- The hosted Supabase migration runner (postgres) is a superuser, so ALTER
--- ... OWNER TO needs no extra role membership here. (The local `supabase start`
--- dev image runs postgres as a restricted role and would need a one-off
--- `grant dealsure_owner to postgres` before replaying migrations locally — see
--- docs/architecture/database-ownership-decision.md. No Docker-only hack is
--- retained in source.)
+-- On hosted Supabase the migration runner (postgres) is NOT a superuser
+-- (https://supabase.com/docs/guides/database/postgres/roles-superuser), so
+-- `ALTER ... OWNER TO dealsure_owner` would fail with 42501. PostgreSQL lets a
+-- role's CREATOR administer it, and this migration creates dealsure_owner, so
+-- postgres can grant itself membership here; membership satisfies the
+-- has_privs_of_role check that ALTER ... OWNER TO requires. This grant is a
+-- hosted requirement, not a Docker workaround — the local dev image simply
+-- mirrors the platform's non-superuser postgres. See
+-- docs/architecture/database-ownership-decision.md.
+grant dealsure_owner to postgres;
+
 alter schema internal owner to dealsure_owner;
 
 -- ---------------------------------------------------------------------------
