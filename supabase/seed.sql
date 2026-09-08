@@ -10,13 +10,18 @@ values (1, 'DealSure protected-transaction terms (development placeholder — re
 on conflict (version) do nothing;
 
 -- Dev auth users (password hashed with pgcrypto; bcrypt).
+-- auth.users.email has a non-unique INDEX on hosted Supabase (no unique
+-- constraint), so ON CONFLICT (email) is unavailable; NOT EXISTS guards keep
+-- the seed idempotent instead.
 insert into auth.users (id, email, email_confirmed_at, encrypted_password, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, aud, role)
-values
-  (gen_random_uuid(), 'demo@dealsure.dev', now(), crypt('DealSure-dev-2026!', gen_salt('bf')),
-   '{"provider": "email", "providers": ["email"]}', '{"full_name": "Demo User"}', now(), now(), 'authenticated', 'authenticated'),
-  (gen_random_uuid(), 'admin@dealsure.dev', now(), crypt('DealSure-dev-2026!', gen_salt('bf')),
-   '{"provider": "email", "providers": ["email"]}', '{"full_name": "Admin User"}', now(), now(), 'authenticated', 'authenticated')
-on conflict (email) do nothing;
+select gen_random_uuid(), 'demo@dealsure.dev', now(), crypt('DealSure-dev-2026!', gen_salt('bf')),
+       '{"provider": "email", "providers": ["email"]}', '{"full_name": "Demo User"}', now(), now(), 'authenticated', 'authenticated'
+where not exists (select 1 from auth.users where email = 'demo@dealsure.dev');
+
+insert into auth.users (id, email, email_confirmed_at, encrypted_password, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, aud, role)
+select gen_random_uuid(), 'admin@dealsure.dev', now(), crypt('DealSure-dev-2026!', gen_salt('bf')),
+       '{"provider": "email", "providers": ["email"]}', '{"full_name": "Admin User"}', now(), now(), 'authenticated', 'authenticated'
+where not exists (select 1 from auth.users where email = 'admin@dealsure.dev');
 
 -- Elevate the admin fixture to staff roles (profiles/roles are created by the
 -- auth-user trigger; grant staff roles on top).

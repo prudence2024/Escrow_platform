@@ -1,5 +1,10 @@
 -- DealSure disputes + notifications.
 
+-- dealsure_owner must hold CREATE on schema public to become the owner of the
+-- public objects created here (hosted postgres is not a superuser). Revoked at
+-- the end of this migration. See docs/architecture/database-ownership-decision.md.
+grant create on schema public to dealsure_owner;
+
 -- ---------------------------------------------------------------------------
 -- public.disputes
 -- ---------------------------------------------------------------------------
@@ -171,7 +176,8 @@ create policy notifications_select_own on public.notifications
 
 create policy notifications_update_own on public.notifications
   for update using (profile_id = auth.uid())
-  with check (profile_id = auth.uid());
-
--- (no INSERT policy → the Data API cannot create notifications; they are
+  with check (profile_id = auth.uid());-- (no INSERT policy → the Data API cannot create notifications; they are
 -- written by internal.notify or Edge Functions with the service role)
+
+-- Ownership capability cleanup (scoped to this migration; see file head).
+revoke create on schema public from dealsure_owner;

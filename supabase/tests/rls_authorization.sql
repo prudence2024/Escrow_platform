@@ -27,12 +27,14 @@ begin;
 -- Fixtures (run as the migration/superuser role)
 -- ---------------------------------------------------------------------------
 -- A third non-staff user: an unrelated authenticated user for negative tests.
+-- (auth.users.email has a non-unique index on hosted Supabase, so no
+-- ON CONFLICT (email); a NOT EXISTS guard keeps this idempotent.)
 insert into auth.users (id, email, email_confirmed_at, encrypted_password,
                         raw_app_meta_data, raw_user_meta_data, created_at, updated_at, aud, role)
-values (gen_random_uuid(), 'stranger@dealsure.dev', now(), crypt('Stranger-dev-2026!', gen_salt('bf')),
+select gen_random_uuid(), 'stranger@dealsure.dev', now(), crypt('Stranger-dev-2026!', gen_salt('bf')),
         '{"provider": "email", "providers": ["email"]}', '{"full_name": "Stranger"}',
-        now(), now(), 'authenticated', 'authenticated')
-on conflict (email) do nothing;
+        now(), now(), 'authenticated', 'authenticated'
+where not exists (select 1 from auth.users where email = 'stranger@dealsure.dev');
 
 -- A shareable (unaccepted) transaction owned by the seed seller.
 insert into public.transactions

@@ -1,5 +1,20 @@
 -- DealSure identity: profiles, user_roles, terms_*, kyc_profiles, bank_accounts.
 -- RLS-first: every table has explicit policies; no blanket USING(true).
+--
+-- ORDERING NOTE: internal.has_role_any/has_role/is_staff are referenced by RLS
+-- policies below. CREATE POLICY parse-analyzes its USING expression at creation
+-- time, and the helpers query public.user_roles, so the definition order is:
+-- identity tables -> helper functions -> policies. (The helpers cannot be
+-- created before public.user_roles exists: SQL-language function bodies are
+-- parse-analyzed at CREATE time.)
+
+-- dealsure_owner (created in 0001) must hold CREATE on schema public before it
+-- can become the owner of objects in that schema (PostgreSQL requires the new
+-- owner to have schema CREATE; hosted postgres is not a superuser and cannot
+-- bypass this). Revoked at the end of this migration so the capability exists
+-- only while the identity tables are being created. See
+-- docs/architecture/database-ownership-decision.md.
+grant create on schema public to dealsure_owner;
 
 -- ---------------------------------------------------------------------------
 -- public.profiles — profiles.id = auth.users.id (approved decision #2)
@@ -56,20 +71,6 @@ create trigger on_auth_user_created
 
 alter function public.handle_new_auth_user() owner to dealsure_owner;
 
--- RLS: users see and update their own profile; staff can read for support.
-alter table public.profiles enable row level security;
-
-create policy profiles_select_own on public.profiles
-  for select using (id = auth.uid());
-
-create policy profiles_select_staff on public.profiles
-  for select using (internal.has_role_any(ARRAY['support_agent', 'dispute_agent', 'operations_admin', 'finance_admin', 'super_admin']));
-
--- Updates only on safe, self-managed columns (least privilege).
-create policy profiles_update_own on public.profiles
-  for update using (id = auth.uid())
-  with check (id = auth.uid());
-
 -- ---------------------------------------------------------------------------
 -- public.user_roles — database-backed authorization (approved decision #12)
 -- ---------------------------------------------------------------------------
@@ -89,13 +90,6 @@ create table public.user_roles (
 create index user_roles_by_profile on public.user_roles (profile_id);
 
 alter table public.user_roles owner to dealsure_owner;
-
-alter table public.user_roles enable row level security;
-
--- No direct user access to user_roles. Roles are read through
--- internal.has_role_any() / get_my_roles() and staff queries below.
-create policy user_roles_select_staff on public.user_roles
-  for select using (internal.has_role_any(ARRAY['operations_admin', 'finance_admin', 'super_admin']));
 
 -- Every profile starts as buyer + seller (a person may be both).
 create or replace function public.assign_default_roles()
@@ -121,7 +115,9 @@ alter function public.assign_default_roles() owner to dealsure_owner;
 
 -- ---------------------------------------------------------------------------
 -- internal.has_role_any / internal.has_role / internal.is_staff —
--- role checks used by RLS policies and trusted functions (SECURITY DEFINER)
+-- role checks used by RLS policies and trusted functions (SECURITY DEFINER).
+-- Defined here, AFTER the tables they query and BEFORE any policy that
+-- references them.
 -- ---------------------------------------------------------------------------
 create or replace function internal.has_role_any(p_roles text[])
 returns boolean
@@ -182,6 +178,31 @@ $$;
 
 alter function public.get_my_roles() owner to dealsure_owner;
 grant execute on function public.get_my_roles() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- RLS policies (helper functions now exist)
+-- ---------------------------------------------------------------------------
+
+-- profiles: users see and update their own profile; staff can read for support.
+alter table public.profiles enable row level security;
+
+create policy profiles_select_own on public.profiles
+  for select using (id = auth.uid());
+
+create policy profiles_select_staff on public.profiles
+  for select using (internal.has_role_any(ARRAY['support_agent', 'dispute_agent', 'operations_admin', 'finance_admin', 'super_admin']));
+
+-- Updates only on safe, self-managed columns (least privilege).
+create policy profiles_update_own on public.profiles
+  for update using (id = auth.uid())
+  with check (id = auth.uid());
+
+-- user_roles: no direct user access. Roles are read through
+-- internal.has_role_any() / get_my_roles() and staff queries below.
+alter table public.user_roles enable row level security;
+
+create policy user_roles_select_staff on public.user_roles
+  for select using (internal.has_role_any(ARRAY['operations_admin', 'finance_admin', 'super_admin']));
 
 -- ---------------------------------------------------------------------------
 -- public.terms_versions / public.terms_acceptances
@@ -275,3 +296,11 @@ create policy bank_accounts_insert_own on public.bank_accounts
   for insert with check (profile_id = auth.uid());
 
 -- Status verification is server-only: no user UPDATE grant.
+
+-- ---------------------------------------------------------------------------
+-- Ownership capability cleanup
+-- ---------------------------------------------------------------------------
+-- dealsure_owner CREATE on public is scoped to migration 0002 only; the
+-- capability is revoked here once identity objects are owned and RLS is in
+-- place (grants remain possible via ownership; arbitrary CREATE is not).
+revoke create on schema public from dealsure_owner;

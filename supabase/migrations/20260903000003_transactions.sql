@@ -1,45 +1,12 @@
 -- DealSure transactions domain: transactions, items, media, participants,
 -- status history, the trusted transition machine, and RLS.
 
--- ---------------------------------------------------------------------------
--- internal.can_view_transaction — visibility helper reused by many policies
--- (mirrors Convex canViewTransaction; also reproduced in transaction reads)
---
--- NOTE: pre-acceptance invite visibility is deliberately NOT included here.
--- Policies keyed on transaction id cannot prove slug possession, so adding a
--- "status = PENDING_BUYER_ACCEPTANCE" clause here would let ANY authenticated
--- user enumerate every unaccepted transaction. Invite access goes through
--- public.get_transaction_by_slug() instead, where the slug itself is the
--- credential (96-bit unguessable, mirrors Convex).
--- ---------------------------------------------------------------------------
-create or replace function internal.can_view_transaction(p_transaction_id uuid)
-returns boolean
-language sql
-security definer
-stable
-set search_path = public, internal
-as $$
-  select exists (
-    select 1
-    from public.transactions t
-    where t.id = p_transaction_id
-      and (
-        t.seller_id = auth.uid()
-        or t.buyer_id = auth.uid()
-        or exists (
-          select 1 from public.transaction_participants tp
-          where tp.transaction_id = t.id and tp.profile_id = auth.uid()
-        )
-        or internal.is_staff()
-      )
-  );
-$$;
-
-alter function internal.can_view_transaction(uuid) owner to dealsure_owner;
--- Grant only to authenticated: anon visibility is handled exclusively by
--- public.get_transaction_by_slug() (migration 0003). RLS policies on tables
--- anon cannot SELECT never evaluate this function for anon.
-grant execute on function internal.can_view_transaction(uuid) to authenticated;
+-- dealsure_owner must hold CREATE on schema public to become the owner of the
+-- public objects created here (PostgreSQL requires the new owner to have
+-- schema CREATE; hosted postgres is not a superuser and cannot bypass this).
+-- Revoked at the end of this migration. See
+-- docs/architecture/database-ownership-decision.md.
+grant create on schema public to dealsure_owner;
 
 -- ---------------------------------------------------------------------------
 -- public.transactions
@@ -304,6 +271,51 @@ create index transaction_participants_by_profile on public.transaction_participa
 alter table public.transaction_participants owner to dealsure_owner;
 
 -- ---------------------------------------------------------------------------
+-- internal.can_view_transaction — visibility helper reused by many policies
+-- (mirrors Convex canViewTransaction; also reproduced in transaction reads)
+--
+-- NOTE: pre-acceptance invite visibility is deliberately NOT included here.
+-- Policies keyed on transaction id cannot prove slug possession, so adding a
+-- "status = PENDING_BUYER_ACCEPTANCE" clause here would let ANY authenticated
+-- user enumerate every unaccepted transaction. Invite access goes through
+-- public.get_transaction_by_slug() instead, where the slug itself is the
+-- credential (96-bit unguessable, mirrors Convex).
+--
+-- ORDERING: defined here, AFTER the tables it queries — SQL-language function
+-- bodies are parse-analyzed at CREATE time, so a forward reference to
+-- public.transactions / public.transaction_participants would fail on a clean
+-- database.
+-- ---------------------------------------------------------------------------
+create or replace function internal.can_view_transaction(p_transaction_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public, internal
+as $$
+  select exists (
+    select 1
+    from public.transactions t
+    where t.id = p_transaction_id
+      and (
+        t.seller_id = auth.uid()
+        or t.buyer_id = auth.uid()
+        or exists (
+          select 1 from public.transaction_participants tp
+          where tp.transaction_id = t.id and tp.profile_id = auth.uid()
+        )
+        or internal.is_staff()
+      )
+  );
+$$;
+
+alter function internal.can_view_transaction(uuid) owner to dealsure_owner;
+-- Grant only to authenticated: anon visibility is handled exclusively by
+-- public.get_transaction_by_slug() (migration 0003). RLS policies on tables
+-- anon cannot SELECT never evaluate this function for anon.
+grant execute on function internal.can_view_transaction(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
 -- RLS for the transactions domain
 -- ---------------------------------------------------------------------------
 alter table public.transactions enable row level security;
@@ -346,9 +358,10 @@ create policy transaction_media_insert_seller_draft on public.transaction_media
       select 1 from public.transactions t
       where t.id = transaction_id and t.seller_id = auth.uid() and t.status = 'DRAFT'
     )
-  );
-
--- NO direct UPDATE/INSERT grants for status or participants:
+  );-- NO direct UPDATE/INSERT grants for status or participants:
 --   * transactions.status changes ONLY through internal.transition_transaction
 --   * transaction_participants rows are written by the accept flow (server-side)
 --   * transaction_status_history is written by the transition function
+
+-- Ownership capability cleanup (scoped to this migration; see file head).
+revoke create on schema public from dealsure_owner;

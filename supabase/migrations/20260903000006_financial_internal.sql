@@ -3,6 +3,13 @@
 -- balanced), settlements, refunds, risk_flags, admin_notes.
 -- The browser can NEVER INSERT/UPDATE any of these directly.
 
+-- dealsure_owner must hold CREATE on schema public to become the owner of
+-- public.payment_intents (hosted postgres is not a superuser). internal-schema
+-- objects need no grant: dealsure_owner owns the internal schema (0001).
+-- Revoked at the end of this migration. See
+-- docs/architecture/database-ownership-decision.md.
+grant create on schema public to dealsure_owner;
+
 -- ---------------------------------------------------------------------------
 -- public.payment_intents — visible to payer/participants/staff (read-only)
 -- ---------------------------------------------------------------------------
@@ -366,11 +373,12 @@ as $$
 $$;
 
 alter function internal.get_audit_log(int, text, uuid) owner to dealsure_owner;
-grant execute on function internal.get_audit_log(int, text, uuid) to authenticated;
-
--- Chart of accounts (dev baseline; matches codes used by the Convex ledger).
+grant execute on function internal.get_audit_log(int, text, uuid) to authenticated;-- Chart of accounts (dev baseline; matches codes used by the Convex ledger).
 insert into internal.ledger_accounts (code, name, type, currency) values
   ('1000', 'Custody asset (payment partner)', 'ASSET', 'NGN'),
   ('2000', 'Buyer payable (escrow-like liability)', 'LIABILITY', 'NGN'),
   ('4000', 'Fee revenue', 'REVENUE', 'NGN')
 on conflict (code) do nothing;
+
+-- Ownership capability cleanup (scoped to this migration; see file head).
+revoke create on schema public from dealsure_owner;

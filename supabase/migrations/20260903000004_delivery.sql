@@ -1,6 +1,11 @@
 -- DealSure delivery: deliveries, delivery_events (public, RLS) and
 -- internal.delivery_otps (hashed codes, atomic verify, server-only).
 
+-- dealsure_owner must hold CREATE on schema public to become the owner of the
+-- public objects created here (hosted postgres is not a superuser). Revoked at
+-- the end of this migration. See docs/architecture/database-ownership-decision.md.
+grant create on schema public to dealsure_owner;
+
 -- ---------------------------------------------------------------------------
 -- public.deliveries
 -- ---------------------------------------------------------------------------
@@ -149,7 +154,8 @@ create policy delivery_events_select_visible on public.delivery_events
       select 1 from public.deliveries d
       where d.id = delivery_id and internal.can_view_transaction(d.transaction_id)
     )
-  );
-
--- No client INSERT/UPDATE on deliveries/events: dispatch/confirm run server-side.
+  );-- No client INSERT/UPDATE on deliveries/events: dispatch/confirm run server-side.
 -- internal.delivery_otps is not exposed to the Data API at all (internal schema).
+
+-- Ownership capability cleanup (scoped to this migration; see file head).
+revoke create on schema public from dealsure_owner;
