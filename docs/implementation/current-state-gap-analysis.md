@@ -308,3 +308,11 @@ EXPLICITLY NOT IMPLEMENTED (do not mark complete): Node API, repository implemen
 - Identifier/capability/identity distinction, message-trust rule, money ceiling rationale, freeze rule (001–011 immutable; future work uses 012+), and cloud smoke-test gate documented in `turso-development-architecture.md`.
 - Cloud Turso remains UNVERIFIED (no credentials) — not a blocker for the local-architecture freeze.
 
+## 12. Phase 4 outcome (read-only API foundation; Convex authoritative for writes)
+
+- Hono selected over Express (in-core middleware, `app.request()` testability, +1 adapter dep only); decision recorded with auth-bridge findings.
+- `/api/v1`: health, readiness, transaction list/detail, safe invite preview, own profile, public seller card. OpenAPI: `docs/api/v1-openapi.yaml`.
+- Auth: `ApiAuth` + deny-by-default; test-only injection structurally barred from entry; Convex-passthrough verifier designed but not built (no official mechanism).
+- Reads enforce seller/buyer/participant/staff at the service layer with existence-hiding 404s; invite DTO is minimum-fields; seller DTO is display-only.
+- No writes, no cutover, no payments, no deployments. Turso remains the read-validation target, not the source of truth.
+

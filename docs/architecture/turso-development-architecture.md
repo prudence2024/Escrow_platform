@@ -62,9 +62,31 @@ Status: foundation only — parallel scaffolding, zero traffic moved.
 
 ## What is deliberately NOT here yet
 
-Node API, repository implementations, services, frontend cutover, real
-payments/settlements/KYC, provider execution, production data. See the
-gap analysis for phase mapping.
+Repository implementations (now exist for reads — see Phase 4 note), services
+(beyond read/query services), frontend cutover, real payments/settlements/
+KYC, provider execution, production data. See the gap analysis for phase
+mapping.
+
+## Phase 4 outcome (read-only API foundation, Convex still authoritative)
+
+- Hono API (`server/api/`, decision: `server-api-decision.md`) at `/api/v1`:
+  health, readiness (counts only), transaction list/detail, safe invite
+  preview, own profile, public seller card. Served via `@hono/node-server`
+  (`npm run dev:api`); static Vite serving untouched.
+- Auth: no official Convex-session verifier exists in the SDK, so protected
+  routes use the `ApiAuth` interface with `DenyAllAuth` default (401s in real
+  deployments); tests inject principals in-process (structurally barred from
+  entry points). Invite preview is the only safe-public route by design.
+- Reads flow principal → query service (shared Phase 2 policy) → Turso read
+  repositories (parameterized; allowlisted filters; service-level pagination
+  ceiling) → explicit DTOs (never raw rows). Writes throw: Convex owns them.
+- Envelope `{error:{code,message,requestId}}`, server-generated request IDs
+  (header + logs), JSON logs with secret scrubbing, baseline API headers,
+  allowlist CORS (default same-origin), 100KB body cap, graceful shutdown.
+- Shadow comparison is pure functions only (no auto-query, no write-back).
+- Source of truth: Convex = authoritative application state; Turso = new
+  persistence target / read-validation system. Nothing treats Turso as
+  write-authoritative yet.
 
 ## Phase 3A hardening notes (frozen with the baseline)
 

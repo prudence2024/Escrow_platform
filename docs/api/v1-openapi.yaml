@@ -1,0 +1,349 @@
+openapi: 3.0.3
+info:
+  title: DealSure Server API
+  version: 1.0.0
+  description: >
+    Trusted read foundation (Phase 4). Convex remains authoritative for all
+    writes. Error envelope everywhere: { error: { code, message, requestId } }.
+servers:
+  - url: http://localhost:3001/api/v1
+paths:
+  /health:
+    get:
+      summary: Liveness probe (public)
+      operationId: getHealth
+      responses:
+        '200':
+          description: Server alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /readiness:
+    get:
+      summary: Dependency readiness (public, counts only)
+      operationId: getReadiness
+      responses:
+        '200':
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+        '503':
+          description: Not ready (database/config not ready)
+  /transactions:
+    get:
+      summary: Caller's transactions (authenticated, participant-scoped)
+      operationId: listTransactions
+      security:
+        - testPrincipal: []
+      parameters:
+        - $ref: '#/components/parameters/RoleFilter'
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Paginated summaries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /transactions/{publicReference}:
+    get:
+      summary: Transaction detail (authenticated participant/staff; existence-hiding 404)
+      operationId: getTransaction
+      security:
+        - testPrincipal: []
+      parameters:
+        - name: publicReference
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        '200':
+          description: Detail DTO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionDetail'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /invites/{slug}:
+    get:
+      summary: Safe invite preview (public; 128-bit slug capability, minimum fields)
+      operationId: getInvitePreview
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{32}$'
+      responses:
+        '200':
+          description: Minimum safe preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitePreview'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /profile/me:
+    get:
+      summary: Own private profile (authenticated owner)
+      operationId: getMyProfile
+      security:
+        - testPrincipal: []
+      responses:
+        '200':
+          description: Private profile DTO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /sellers/{profileId}:
+    get:
+      summary: Public seller card, display identity only (authenticated)
+      operationId: getPublicSeller
+      security:
+        - testPrincipal: []
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Public card
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicSeller'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    testPrincipal:
+      type: apiKey
+      in: header
+      name: X-Test-Principal
+      description: TEST-ONLY principal injection (never in production wiring).
+  parameters:
+    RoleFilter:
+      name: role
+      in: query
+      schema:
+        type: string
+        enum: [all, seller, buyer]
+        default: all
+    StatusFilter:
+      name: status
+      in: query
+      schema:
+        type: string
+        enum: [DRAFT, PENDING_BUYER_ACCEPTANCE, AWAITING_PAYMENT, PAYMENT_PROCESSING, PAYMENT_SECURED, READY_FOR_DELIVERY, DISPATCHED, DELIVERED_PENDING_INSPECTION, ACCEPTED, RELEASE_PENDING, SETTLED, DISPUTED, REFUND_PENDING, REFUNDED, CANCELLED, EXPIRED]
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    OffsetParam:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+  responses:
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unauthenticated:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: Not found (also used for hidden denials)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            requestId:
+              type: string
+              format: uuid
+    Pagination:
+      type: object
+      required: [limit, offset, total]
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
+    TransactionSummary:
+      type: object
+      required: [publicReference, title, category, currency, amountMinor, totalMinor, status, viewerRole, updatedAt]
+      properties:
+        publicReference:
+          type: string
+        title:
+          type: string
+        category:
+          type: string
+        currency:
+          type: string
+        amountMinor:
+          type: integer
+        totalMinor:
+          type: integer
+        status:
+          type: string
+        viewerRole:
+          type: string
+          enum: [seller, buyer, participant, staff]
+        updatedAt:
+          type: integer
+    TransactionList:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionSummary'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    TransactionDetail:
+      allOf:
+        - $ref: '#/components/schemas/TransactionSummary'
+        - type: object
+          required: [description, deliveryFeeMinor, platformFeeMinor, createdAt]
+          properties:
+            description:
+              type: string
+            deliveryFeeMinor:
+              type: integer
+            platformFeeMinor:
+              type: integer
+            inspectionDeadline:
+              type: integer
+              nullable: true
+            counterpartyDisplayName:
+              type: string
+              nullable: true
+            createdAt:
+              type: integer
+    InvitePreview:
+      type: object
+      required: [title, description, category, currency, amountMinor, deliveryFeeMinor, totalMinor, status, sellerDisplayName]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        currency:
+          type: string
+        amountMinor:
+          type: integer
+        deliveryFeeMinor:
+          type: integer
+        totalMinor:
+          type: integer
+        status:
+          type: string
+        inspectionWindowDays:
+          type: integer
+          nullable: true
+        returnTerms:
+          type: string
+          nullable: true
+        sellerDisplayName:
+          type: string
+          nullable: true
+    Profile:
+      type: object
+      required: [id, roles]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          nullable: true
+        displayName:
+          type: string
+          nullable: true
+        roles:
+          type: array
+          items:
+            type: string
+    PublicSeller:
+      type: object
+      required: [profileId]
+      properties:
+        profileId:
+          type: string
+        displayName:
+          type: string
+          nullable: true
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    Readiness:
+      type: object
+      required: [ready, migrations]
+      properties:
+        ready:
+          type: boolean
+        migrations:
+          type: object
+          required: [applied, expected]
+          properties:
+            applied:
+              type: integer
+            expected:
+              type: integer
