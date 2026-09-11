@@ -51,6 +51,8 @@ export interface Transaction {
   status: TransactionStatus;
   inspectionDeadline: number | null;
   expiresAt: number | null;
+  inspectionWindowDays: number | null;
+  returnTerms: string | null;
   disputeBlocked: boolean;
   createdAt: number;
   updatedAt: number;
@@ -79,6 +81,13 @@ export interface TransactionRepository {
   findById(id: string): Promise<Transaction | null>;
   findByPublicReference(publicReference: string): Promise<Transaction | null>;
   findByInviteSlug(slug: string): Promise<Transaction | null>;
+  listForUser(
+    profileId: string,
+    limit: number,
+    offset?: number,
+    role?: "all" | "seller" | "buyer",
+    status?: TransactionStatus,
+  ): Promise<{ items: Transaction[]; total: number }>;
   listForProfile(profileId: string, limit: number): Promise<Transaction[]>;
   create(input: Omit<Transaction, "id" | "createdAt" | "updatedAt">): Promise<Transaction>;
   /**
