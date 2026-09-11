@@ -22,6 +22,12 @@ migration/exports/
 *.dump
 *.sql.gz
 
+# Local dev databases — never commit data files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
