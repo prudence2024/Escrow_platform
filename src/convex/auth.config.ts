@@ -1,12 +1,13 @@
 import type { AuthConfig } from "convex/server";
 
-// Freebuff-signed federated tokens (see freebuff web's
-// src/lib/vly-convex-jwt.ts) let a signed-in freebuff.com user carry their
-// identity into this project without going through local sign-in. customJwt
-// is correct for this provider: freebuff's tokens and JWKS both carry a
-// `kid` header, which the customJwt validation path requires.
-const freebuffIssuer =
-  process.env.VLY_CONVEX_AUTH_ISSUER ?? "https://auth.freebuff.app";
+// DealSure trusts exactly one identity issuer: itself (Convex Auth,
+// self-issued JWTs validated via OIDC discovery). The former Freebuff
+// federated `customJwt` bridge was retired in Phase 2 (Decision B):
+// development-era infrastructure with no required production dependency in
+// this repository (see docs/architecture/authentication-decision.md and
+// docs/architecture/freebuff-jwt-retirement.md). Email OTP *delivery* still
+// uses the Freebuff send_otp endpoint — that is transport, not identity
+// trust, and is unchanged.
 
 export default {
   providers: [
@@ -21,13 +22,6 @@ export default {
     {
       domain: process.env.CONVEX_SITE_URL!,
       applicationID: "convex",
-    },
-    {
-      type: "customJwt",
-      issuer: freebuffIssuer,
-      jwks: `${freebuffIssuer}/api/web/.well-known/jwks.json`,
-      applicationID: "vly-convex",
-      algorithm: "RS256",
     },
   ],
 } satisfies AuthConfig;
