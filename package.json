@@ -12,10 +12,12 @@
     "preview": "vite preview",
     "test": "vitest run",
     "migrate": "tsx server/db/migrate-cli.ts",
-    "seed:dev": "tsx server/db/seed/dev.ts"
+    "seed:dev": "tsx server/db/seed/dev.ts",
+    "dev:api": "tsx server/api/server.ts"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.95",
+    "@hono/node-server": "^2.1.1",
     "@hookform/resolvers": "^5.2.2",
     "@jridgewell/trace-mapping": "^0.3.31",
     "@libsql/client": "^0.18.0",
