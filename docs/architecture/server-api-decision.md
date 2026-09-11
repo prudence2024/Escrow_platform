@@ -36,6 +36,43 @@ in real deployments) + `TestPrincipalAuth` for in-process tests only
 forward the caller bearer to a Convex identity query and let Convex verify.
 Health/readiness and the slug-capability invite preview stay available.
 
+## Auth bridge outcome (Phase 5 research — classification inside)
+
+Installed-SDK audit (see gap analysis §13) found a REAL, officially
+surfaced mechanism:
+
+- Convex Auth session tokens are RS256 JWTs (`@convex-dev/auth`
+  `tokens.ts`): `iss` = deployment URL, `aud` = `"convex"`,
+  `sub` = `"<userId>|<sessionId>"`, ~1h lifetime.
+- The deployment serves OIDC discovery at
+  `/.well-known/openid-configuration` via the official
+  `auth.addHttpRoutes()` surface — public verification material, not
+  reverse engineering.
+- The frontend can forward the token via the official `useAuthToken()`
+  hook (`@convex-dev/auth/react`).
+
+Classification: **SUPPORTED_WITH_PROVIDER_CONFIGURATION** (not
+SUPPORTED_NOW): it additionally needs a live Convex deployment serving
+discovery, JWKS fetching/caching ops, the `jose` dependency (added), and
+acceptance of the 1h revocation window (identical to the Convex backend's
+own semantics — sign-out stops refresh, not outstanding access tokens).
+
+Implemented: `server/auth/convexJwtVerifier.ts` (JWKS + issuer + audience +
+expiry enforced; sub split; roles ONLY from an injected trusted loader,
+unknown role strings filtered). Nine tests mint local RS256 tokens through
+the identical code path (missing/malformed/expired/forged/valid/issuer/
+sub-shape/role-source/role-filter). **Production wiring stays DenyAllAuth**
+until a live deployment + reachability + ops review exist — no production
+auth enabled on decode-ability alone.
+
+Transport analysis: bearer credentials (no new cookies, so no new CSRF
+surface). Web PWA: `useAuthToken()` + `Authorization` header; token lives
+in the Convex client's existing browser storage (XSS exposure unchanged —
+not worsened). Native/Expo: same bearer flow with OS secure storage; no
+cookie dependence, no browser-only assumptions. Lifetimes: 1h access +
+30-day rotating refresh (provider-managed). Replay risk bounded by
+short-lived, audience-bound tokens over HTTPS; revocation = 1h window.
+
 ## Read-only scope
 
 Phase 4 implements reads only (transactions, invite preview, profiles) plus

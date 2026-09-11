@@ -309,10 +309,17 @@ EXPLICITLY NOT IMPLEMENTED (do not mark complete): Node API, repository implemen
 - Cloud Turso remains UNVERIFIED (no credentials) — not a blocker for the local-architecture freeze.
 
 ## 12. Phase 4 outcome (read-only API foundation; Convex authoritative for writes)
-
 - Hono selected over Express (in-core middleware, `app.request()` testability, +1 adapter dep only); decision recorded with auth-bridge findings.
 - `/api/v1`: health, readiness, transaction list/detail, safe invite preview, own profile, public seller card. OpenAPI: `docs/api/v1-openapi.yaml`.
 - Auth: `ApiAuth` + deny-by-default; test-only injection structurally barred from entry; Convex-passthrough verifier designed but not built (no official mechanism).
 - Reads enforce seller/buyer/participant/staff at the service layer with existence-hiding 404s; invite DTO is minimum-fields; seller DTO is display-only.
 - No writes, no cutover, no payments, no deployments. Turso remains the read-validation target, not the source of truth.
+
+## 13. Phase 5 outcome (parity + auth bridge; still no writes)
+
+- Auth bridge: SUPPORTED_WITH_PROVIDER_CONFIGURATION. Installed-SDK audit proved RS256 session JWTs + official OIDC discovery + `useAuthToken()` hook; `ConvexJwtVerifier` implemented and tested (JWKS/issuer/audience/expiry, trusted role loader, 9 tests). Production stays DenyAllAuth — no live Convex deployment or reachability exists here to complete the configuration.
+- Parity model: provider-independent snapshots keyed by business identity (email, public reference); exact-integer money; explicit UNMAPPED_STATUS failures; orphan detection.
+- Dev import: explicit-artifact, dry-run, validated, idempotent (stable IDs + OR IGNORE, history never updated), OTP/ledger rows skipped by policy, production-cloud refused unconditionally.
+- Shadow mode: `SHADOW_READ_MODE=off|compare` (default off, production forces off); CLI-only diagnostics, no request coupling, no writes either side.
+- Runbook + reconciliation process documented. Read parity demonstrated on synthetic fixtures via the import→snapshot→compare loop (see test suite); production parity remains a future cutover gate, not a claim.
 

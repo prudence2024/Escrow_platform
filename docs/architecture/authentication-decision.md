@@ -198,3 +198,18 @@ Nothing here modifies the frozen Supabase reference branch.
   allowlist (previously `*`).
 - **Tests (§14–15):** vitest harness (`npm test`); 33 tests across
   policy/OTP/rate-limit/client-mapping — all passing (see Phase 2 report).
+
+## 7. Phase 5 outcome — auth bridge (research + tested adapter, not wired)
+
+- Installed-SDK audit classified the Convex bridge as
+  SUPPORTED_WITH_PROVIDER_CONFIGURATION (RS256 JWT + official OIDC
+  discovery + `useAuthToken()`; details in `server-api-decision.md`).
+- `ConvexJwtVerifier` verifies signature/issuer/audience/expiry and splits
+  `sub`; roles load ONLY from an injected trusted store (unknown strings
+  filtered). Nine tests cover missing/malformed/expired/forged/valid/
+  issuer-mismatch/malformed-sub/role-source/role-filtering.
+- Production behavior UNCHANGED (DenyAllAuth): no live Convex deployment,
+  JWKS reachability, or ops review exists in this environment.
+- Bearer transport analysis (no new cookies/CSRF; PWA token storage
+  unchanged; native-compatible via secure storage; 1h revocation window
+  identical to Convex semantics) recorded in `server-api-decision.md`.

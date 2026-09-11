@@ -45,3 +45,24 @@ never hand-edit the target to match.
 - [ ] dry-run reconciliation passes twice on staging before any cutover talk
 - [ ] rollback plan documented (Convex remains runnable until cutover criteria
       R46/R47 are met)
+
+## Phase 5 exact process (development)
+
+1. **Before snapshot** — record Turso row counts per table (or keep the fresh
+   migrated file empty and note it).
+2. **Import** — explicit artifact file → `importArtifact` with
+   `{ dryRun: true }` first (planned counts, zero writes), then
+   `{ dryRun: false }` on a non-production target. Rerun-safe via stable IDs
+   + INSERT OR IGNORE; OTP rows and journal-less ledger entries skipped by
+   policy with warnings.
+3. **After snapshot** — `buildTursoSnapshot` + `normalizeConvexSnapshot` on
+   the same artifact.
+4. **Comparison** — `compareParity`; require zero findings for covered
+   entities before any cutover discussion. Full command:
+   `SHADOW_READ_MODE=compare npm run shadow:compare -- --artifact <file> --db <file:…>`.
+5. **Failure handling** — per-entity triage per the runbook
+   (`docs/migration/read-parity-runbook.md`); fix fixtures/mappers, never
+   the comparator and never by hand-editing either database.
+6. **Zero-write-to-Convex guarantee** — parity/import modules contain no
+   Convex client, no deployment URL, and no credentials; enforced by code
+   inspection (no such imports exist) and by running against local files.
