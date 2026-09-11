@@ -116,3 +116,85 @@ Explicitly **rejected**:
    `profiles.id = auth.uid()` with `auth_provider`/`auth_subject` columns for
    traceability.
 3. Whether anonymous guest accounts that never onboarded migrate at all.
+
+## 6. Phase 2 outcome — Turso track (`architecture/turso-startup`)
+
+Historical §§1–5 above are preserved as written (Supabase-track context).
+This section records what Phase 2 implemented/decided on the active track.
+Nothing here modifies the frozen Supabase reference branch.
+
+- **Provider (Decision A):** Convex Auth kept. No second provider, no
+  homemade auth. Abstraction added: `src/lib/auth/types.ts`
+  (`AuthenticatedPrincipal`, `AuthSession`, `AuthService`),
+  `src/lib/auth/policy.ts` (canonical roles, legacy map, capabilities,
+  tx-context guards, step-up registry), `src/convex/authService.ts`
+  (`ConvexAuthService`), `src/convex/authz.ts` (server guards),
+  `src/lib/auth/client.ts` + `useAuth().principal` as the UI seam
+  (raw `user` row retained for compatibility; new code prefers `principal`).
+- **Freebuff (Decision B): RETIRED from the auth trust path.**
+  `auth.config.ts` no longer trusts the `customJwt` Freebuff issuer;
+  `VLY_CONVEX_AUTH_ISSUER` removed from `.env.example`. Verified: no
+  DealSure sign-in flow depends on it (only the dev preview/toolbar embed
+  used federated identity; email delivery via `send_otp` is transport, not
+  trust, and is unchanged). Takes effect on next Convex deploy. Also see
+  `docs/architecture/freebuff-jwt-retirement.md` outcome note.
+- **Transport (Decision C):** Convex Auth mechanism unchanged; `AuthService`
+  is transport-neutral. Target recorded: web → provider-backed HttpOnly
+  cookies; native → short-lived provider bearer flow. Not implemented yet.
+- **Guests (Decision D): SANDBOX ONLY, enforced server-side.**
+  `requireNonGuestUser` now gates: tx create/publish/accept/cancel/
+  markReady/settle, payment request/confirm, dispatch/delivery-confirm,
+  dispute open/message/evidence, bank accounts, KYC submit. Reads,
+  notifications, and profile contact updates remain available.
+- **Roles (Decision E):** canonical vocabulary
+  buyer/seller/merchant/support/dispute_agent/operations/finance/
+  super_admin in `policy.ts`; legacy map user→[], seller→[seller],
+  ops→[operations], admin→[super_admin] (temporary elevated compat —
+  narrow in Phase 15). Buyer/seller enforced as tx-context
+  (`sellerId`/`buyerId`/participant), staff as global capabilities
+  (§10 list). Forged/unknown role values resolve to zero roles.
+- **Email OTP review (§7):** CSPRNG 6-digit + 15-min TTL confirmed in code.
+  Provider-managed: code storage/hash, single-use, verify throttling
+  (`authRateLimits`, 10 failed/hr default — verified in
+  `@convex-dev/auth` `verifyCodeAndSignIn.ts`). DealSure-managed: generic
+  errors, fail-closed send. Gaps documented: send/resend throttling has no
+  provider hook (`sendVerificationRequest` receives no ctx) →
+  DEFERRED_TO_API_GATEWAY + UI cooldown only; session expiry/rotation
+  internals are library-opaque (`AuthSession.expiryUnknown: true` —
+  no UI countdown is promised).
+- **Rate limits (§8, enforced):** persistent `rate_limit_counters` table +
+  `RATE_LIMIT_POLICIES`: txCreate 20/hr, dispatch 5/hr/tx, disputeOpen
+  10/hr, disputeMessage 60/hr, accept 60/hr, roleChange 30/hr/admin.
+  Deferred honestly: OTP send, invite lookup (read-only query), IP-based.
+- **Session policy (§9):** Convex Auth sessions are provider-managed;
+  logout via `signOut`; revocation semantics are library-internal
+  (`revocable: true` as designed, not independently verified — re-verify
+  when the Node API lands). No 60s warning is promised because expiry is
+  not exposed. Idle/absolute policy + cross-tab coordination belong to the
+  future Node session design.
+- **MFA/step-up (Decision F, §11): HONESTLY BLOCKED, not faked.**
+  `STEP_UP_ACTIONS` (role.change, refund.approve, settlement.authorize,
+  payout_destination.change, dispute.resolve_high_value,
+  super_admin.action) enforced by `requireStepUp`: denies in production
+  (`STEP_UP_ENFORCED=true`) with `STEP_UP_REQUIRED`; writes an explicit
+  `STEP_UP_DEFERRED` audit record in dev. Wired into `profile.setRole`
+  and the dispute refund branch. Production privileged access stays
+  BLOCKED pending an MFA-capable authenticator.
+- **Delivery OTP (Decision G): FIXED.** CSPRNG (`generateSecureNumericCode`,
+  rejection-sampled) + HMAC-SHA256 digest keyed by
+  `DELIVERY_OTP_HASH_SECRET` with per-record context
+  (`transactionId:deliveryId`); digest-only storage (`codeDigest`);
+  10-minute default TTL (`DELIVERY_OTP_TTL_SECONDS`, 1h ceiling);
+  single-live-code supersede; one-time dev reveal gated by explicit
+  `DELIVERY_OTP_DEV_REVEAL=true` (default off, never logged); OTP success
+  does not settle funds. Legacy plaintext rows fail closed.
+- **Headers/CORS (§12):** `main.ts` (actual static layer) now sends
+  `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options:
+  SAMEORIGIN`, minimal `Permissions-Policy`. Strict CSP is documented as
+  deployment-proxy work (recommended policy to be finalized with asset
+  hashes) — not hard-coded to avoid breaking provider scripts.
+- **postMessage (§13):** outbound announce only when embedded; inbound
+  `navigate` commands restricted to same-origin + `VITE_TRUSTED_EMBED_ORIGINS`
+  allowlist (previously `*`).
+- **Tests (§14–15):** vitest harness (`npm test`); 33 tests across
+  policy/OTP/rate-limit/client-mapping — all passing (see Phase 2 report).

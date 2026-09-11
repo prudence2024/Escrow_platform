@@ -51,6 +51,20 @@ authentication on the Freebuff platform. Per approved decision #3, it is
 Do **not** delete the current implementation before the equivalent Supabase
 authentication flow passes tests (approved decision #3).
 
+### Phase 2 outcome (Turso track) — RETIRED EARLY per Decision B
+
+The Supabase-track gate above assumed Convex Auth would live until Phase 17
+of that migration. On the ACTIVE Turso track, Phase 2 Decision B re-decided:
+retire the federated bridge now because (a) re-audit confirmed zero
+production dependency (only the dev preview/toolbar embed used it), and
+(b) every extra trusted issuer is unjustified attack surface. Removed:
+`customJwt` entry from `src/convex/auth.config.ts`,
+`VLY_CONVEX_AUTH_ISSUER` from `.env.example`. Email OTP *delivery* via
+Freebuff `send_otp` is transport, not identity trust — unchanged. Effective
+on next Convex deploy; no other workflow depends on it (verified by
+code search: remaining freebuff refs are toolbar links, email transport,
+and docs).
+
 ## 4. Documentation of the bridge (for the record)
 
 | Property | Value / evidence |

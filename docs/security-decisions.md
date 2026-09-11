@@ -46,3 +46,17 @@ Treat this as a financial transaction system.
 ## Monitoring
 - The Convex dashboard acts as the error/observe surface for this build. Structured,
   secret-redacted logs recorded as convex console output + audit rows.
+## Phase 2 addendum (2026-09-11, Turso track)
+- Rate limiting is now actually enforced server-side via persistent
+  `rate_limit_counters` + `RATE_LIMIT_POLICIES` (txCreate 20/hr,
+  dispatch 5/hr/tx, disputeOpen 10/hr, disputeMessage 60/hr, accept 60/hr,
+  roleChange 30/hr/admin). Email-OTP *verify* brute force is provider-managed
+  (`authRateLimits`, 10 failed/hr). OTP-send, invite-lookup, and IP-based
+  limits are honestly DEFERRED (no stable server key in current paths).
+- Correction: the "evidence size/MIME validated server-side" line above
+  remains aspirational — `disputes.addEvidence` still accepts a URL with a
+  TODO scan. Real validation arrives with the private-storage presign flow
+  (Phase 9). Do not rely on it today.
+- Delivery OTP P0 fixed (CSPRNG + HMAC digest + 10-min TTL); guest powers
+  removed server-side; Freebuff JWT retired; step-up MFA honestly blocked
+  pending a capable authenticator. See Phase 2 report + authentication-decision.md §6.
