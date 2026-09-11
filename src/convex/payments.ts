@@ -1,7 +1,8 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { STATUSES, SECURED_WORDING, PROVIDER } from "./config";
-import { requireUser, performTransition, audit, notify, postDoubleEntry, genPublicId, now } from "./lib";
+import { performTransition, audit, notify, postDoubleEntry, genPublicId, now } from "./lib";
+import { requireNonGuestUser } from "./authz";
 import { getProvider } from "./payments/providers";
 import type { MutationCtx } from "./_generated/server";
 
@@ -19,7 +20,7 @@ export const requestPayment = mutation({
     provider: v.optional(v.string()),
   },
   handler: async (ctx, { reference, idempotencyKey, provider = "mock" }) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireNonGuestUser(ctx);
     const tx = await getTxByReference(ctx, reference);
     if (!tx) throw new Error("Transaction not found");
     if (tx.buyerId !== user._id) throw new Error("Only the buyer can initiate payment");
@@ -86,7 +87,10 @@ export const requestPayment = mutation({
 export const confirmPayment = mutation({
   args: { reference: v.string(), idempotencyKey: v.string() },
   handler: async (ctx, { reference, idempotencyKey }) => {
-    const user = await requireUser(ctx);
+    // NOTE (Phase 11): this mock confirmation path is buyer-triggered by
+    // design for sandbox only. A live provider MUST replace it with a
+    // provider-signed webhook; never carry this pattern to live money.
+    const { user } = await requireNonGuestUser(ctx);
     const tx = await getTxByReference(ctx, reference);
     if (!tx) throw new Error("Transaction not found");
     if (tx.buyerId !== user._id) throw new Error("Only the buyer can confirm this payment");

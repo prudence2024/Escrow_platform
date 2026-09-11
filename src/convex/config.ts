@@ -33,9 +33,13 @@ export const LIMITS = {
   maxMediaPerTransaction: 12,
 };
 
-// Delivery OTP rules (configurable)
+// Delivery OTP rules (configurable). TTL resolved directionally SHORT per
+// Phase 2 §17: in-person handover verification must expire in minutes, not
+// hours. Override via DELIVERY_OTP_TTL_SECONDS where the runtime permits;
+// the default below is the development default AND the documented ceiling.
+export const DELIVERY_OTP_TTL_SECONDS = 600; // 10 minutes
 export const OTP = {
-  ttlMs: 3 * 60 * 60 * 1000, // 3 hours
+  ttlMs: DELIVERY_OTP_TTL_SECONDS * 1000,
   maxAttempts: 5,
   length: 6,
 };

@@ -49,14 +49,9 @@ export function genSlug(): string {
   return randHex(12); // unguessable share-link token
 }
 
-export function genCode(length: number): string {
-  const digits = "0123456789";
-  let s = "";
-  for (let i = 0; i < length; i++) {
-    s += digits[Math.floor(Math.random() * digits.length)];
-  }
-  return s;
-}
+// NOTE (Phase 2): the old Math.random-based genCode() delivery-OTP
+// generator was removed. OTP generation lives in src/lib/otp.ts
+// (CSPRNG + HMAC digest). Do not reintroduce Math.random for secrets.
 
 export const now = () => Date.now();
 

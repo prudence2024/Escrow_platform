@@ -1,7 +1,9 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { STATUSES } from "./config";
-import { requireUser, requireStaff, performTransition, audit, notify, postDoubleEntry, genPublicId, now } from "./lib";
+import { requireStaff, performTransition, audit, notify, postDoubleEntry, genPublicId, now } from "./lib";
+import { requireNonGuestUser, requireStepUp } from "./authz";
+import { checkRateLimit } from "./rateLimits";
 import { getProvider } from "./payments/providers";
 import type { MutationCtx } from "./_generated/server";
 
@@ -15,7 +17,8 @@ async function txByRef(ctx: MutationCtx, reference: string) {
 export const open = mutation({
   args: { reference: v.string(), reason: v.string(), details: v.optional(v.string()) },
   handler: async (ctx, { reference, reason, details }) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireNonGuestUser(ctx);
+    await checkRateLimit(ctx, "disputeOpenPerUser", String(user._id));
     const tx = await txByRef(ctx, reference);
     if (!tx) throw new Error("Transaction not found");
     if (tx.buyerId !== user._id && tx.sellerId !== user._id) {
@@ -72,7 +75,8 @@ async function canOpenForStatus(ctx: MutationCtx, status: string) {
 export const message = mutation({
   args: { disputeId: v.id("disputes"), body: v.string() },
   handler: async (ctx, { disputeId, body }) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireNonGuestUser(ctx);
+    await checkRateLimit(ctx, "disputeMessagePerUser", String(user._id));
     const dispute = await ctx.db.get(disputeId);
     if (!dispute) throw new Error("Dispute not found");
     const tx = await ctx.db.get(dispute.transactionId);
@@ -92,7 +96,7 @@ export const message = mutation({
 export const addEvidence = mutation({
   args: { disputeId: v.id("disputes"), url: v.string() },
   handler: async (ctx, { disputeId, url }) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireNonGuestUser(ctx);
     const dispute = await ctx.db.get(disputeId);
     if (!dispute) throw new Error("Dispute not found");
     const tx = await ctx.db.get(dispute.transactionId);
@@ -144,6 +148,9 @@ export const resolveDispute = mutation({
     // buyer refund (full or partial)
     const refundAmount = decision === "partial_refund" ? (refundKobo ?? 0) : tx.totalKobo;
     if (refundAmount <= 0) throw new Error("Refund amount must be positive");
+    // Privileged financial approval: step-up MFA gate (Decision F). Dev:
+    // audit-logged bypass. Production without MFA: denied.
+    await requireStepUp(ctx, "refund.approve", String(disputeId), String(staff._id));
     await performTransition(ctx, { transactionDoc: tx, to: STATUSES.REFUND_PENDING, actorId: staff._id, reason: "Admin resolved in favor of buyer" });
     const intent = await ctx.db.query("payment_intents").withIndex("by_transaction", (q) => q.eq("transactionId", tx._id)).filter((q) => q.eq(q.field("status"), "SECURED")).first();
     const provider = getProvider(intent?.provider ?? "mock");

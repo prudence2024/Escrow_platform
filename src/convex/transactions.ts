@@ -10,7 +10,6 @@ import {
   INSPECTION_WINDOW_DAYS,
 } from "./config";
 import {
-  requireUser,
   requireStaff,
   genPublicId,
   genSlug,
@@ -21,6 +20,8 @@ import {
 } from "./lib";
 import { canOpenDispute, isTerminal } from "./transactions/state";
 import { getActor } from "./lib";
+import { requireNonGuestUser } from "./authz";
+import { checkRateLimit } from "./rateLimits";
 
 // --------------------------------------------------------------------------
 // helpers
@@ -226,7 +227,9 @@ export const create = mutation({
     mediaUrls: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    // Guests (sandbox/demo) may not create consequential transactions.
+    const { user } = await requireNonGuestUser(ctx);
+    await checkRateLimit(ctx, "txCreatePerUser", String(user._id));
     if (args.title.trim().length < 3) throw new Error("Title is too short");
     if (args.title.length > LIMITS.maxTitleLength) throw new Error("Title is too long");
     if (args.description.length > LIMITS.maxDescriptionLength) throw new Error("Description is too long");
@@ -288,7 +291,7 @@ export const publish = mutation({
   // seller publishes -> shareable link. DRAFT -> PENDING_BUYER_ACCEPTANCE
   args: { publicId: v.string() },
   handler: async (ctx, { publicId }) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireNonGuestUser(ctx);
     const tx = await getTxByPublicIdOrSlug(ctx as any, publicId);
     if (!tx) throw new Error("Transaction not found");
     if (tx.sellerId !== user._id) throw new Error("Only the seller can publish");
@@ -321,7 +324,8 @@ export const acceptTerms = mutation({
   // Buyer accepts terms -> AWAITING_PAYMENT
   args: { reference: v.string() }, // publicId or slug
   handler: async (ctx, { reference }) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireNonGuestUser(ctx);
+    await checkRateLimit(ctx, "acceptPerUser", String(user._id));
     const tx = await getTxByPublicIdOrSlug(ctx as any, reference);
     if (!tx) throw new Error("Transaction not found");
     if (tx.sellerId === user._id) throw new Error("Sellers can't accept their own transaction");
@@ -365,7 +369,7 @@ export const acceptTerms = mutation({
 export const cancel = mutation({
   args: { publicId: v.string(), reason: v.optional(v.string()) },
   handler: async (ctx, { publicId, reason }) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireNonGuestUser(ctx);
     const tx = await getTxByPublicIdOrSlug(ctx as any, publicId);
     if (!tx) throw new Error("Transaction not found");
     const isSeller = tx.sellerId === user._id;
@@ -415,7 +419,7 @@ export const freeze = mutation({
 export const markReady = mutation({
   args: { publicId: v.string() },
   handler: async (ctx, { publicId }) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireNonGuestUser(ctx);
     const tx = await getTxByPublicIdOrSlug(ctx as any, publicId);
     if (!tx || tx.sellerId !== user._id) throw new Error("Only the seller can mark ready");
     await performTransition(ctx, {
@@ -434,7 +438,7 @@ export const settle = mutation({
   args: { publicId: v.string(), idempotencyKey: v.optional(v.string()) },
   handler: async (ctx, { publicId, idempotencyKey }) => {
     // called by buyer accept / admin decision. release conditions enforced in releaseTx.
-    const user = await requireUser(ctx);
+    const { user } = await requireNonGuestUser(ctx);
     const { releaseTx } = await import("./settlement");
     return releaseTx(ctx, { publicId, actorId: user._id, idempotencyKey });
   },

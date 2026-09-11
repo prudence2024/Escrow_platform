@@ -1,7 +1,8 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { STATUSES } from "./config";
-import { requireUser, performTransition, audit, notify, postDoubleEntry, genPublicId, now } from "./lib";
+import { performTransition, audit, notify, postDoubleEntry, genPublicId, now } from "./lib";
+import { requireNonGuestUser } from "./authz";
 import { getProvider } from "./payments/providers";
 import type { MutationCtx } from "./_generated/server";
 
@@ -101,7 +102,7 @@ export async function releaseTx(ctx: MutationCtx, args: { publicId: string; acto
 export const accept = mutation({
   args: { reference: v.string() },
   handler: async (ctx, { reference }) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireNonGuestUser(ctx);
     const tx = await txByRef(ctx, reference);
     if (!tx) throw new Error("Transaction not found");
     if (tx.buyerId !== user._id) throw new Error("Only the buyer can accept delivery");

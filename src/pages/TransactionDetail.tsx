@@ -302,6 +302,8 @@ export default function TransactionDetail() {
               if (res?.deliveryOtp) {
                 setOtpIssue(res.deliveryOtp);
                 toast.success("Dispatched — share the one-time delivery code with your buyer.");
+              } else {
+                toast.success("Dispatched — the delivery code travels through the buyer's verified channel.");
               }
             })
           } />

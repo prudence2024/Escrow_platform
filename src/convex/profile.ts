@@ -1,6 +1,8 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireUser, requireAdmin, audit } from "./lib";
+import { requireNonGuestUser, requireStepUp } from "./authz";
+import { checkRateLimit } from "./rateLimits";
 
 export const getOwnProfile = query({
   args: {},
@@ -34,7 +36,8 @@ export const updateProfile = mutation({
 export const addBankAccount = mutation({
   args: { accountName: v.string(), accountNumber: v.string(), bankName: v.string(), isDefault: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    // Payout destinations are sensitive: guests may not register them.
+    const { user } = await requireNonGuestUser(ctx);
     if (!/^[0-9]{10}$/.test(args.accountNumber)) throw new Error("Invalid account number");
     const dup = await ctx.db.query("bank_accounts").withIndex("by_accountNumber", (q) => q.eq("accountNumber", args.accountNumber)).first();
     if (dup) throw new Error("This account is already registered");
@@ -47,7 +50,8 @@ export const addBankAccount = mutation({
 export const submitKyc = mutation({
   args: { docType: v.string() },
   handler: async (ctx, { docType }) => {
-    const user = await requireUser(ctx);
+    // KYC state changes are consequential: guests may not submit.
+    const { user } = await requireNonGuestUser(ctx);
     const existing = await ctx.db.query("kyc_profiles").withIndex("by_user", (q) => q.eq("userId", user._id)).first();
     if (existing) {
       await ctx.db.patch(existing._id, { docType, status: "SUBMITTED" });
@@ -65,6 +69,11 @@ export const setRole = mutation({
   args: { userId: v.id("users"), role: v.union(v.literal("user"), v.literal("seller"), v.literal("ops"), v.literal("admin")) },
   handler: async (ctx, { userId, role }) => {
     const admin = await requireAdmin(ctx);
+    await checkRateLimit(ctx, "roleChangePerAdmin", String(admin._id));
+    // Privileged role change: step-up MFA gate (Decision F). Without an
+    // MFA-capable authenticator this audit-logs in dev and DENIES in
+    // production (STEP_UP_ENFORCED=true). Never silently passes.
+    await requireStepUp(ctx, "role.change", String(userId), String(admin._id));
     await ctx.db.patch(userId, { role });
     await audit(ctx, { entityType: "user", entityId: userId, actorId: admin._id, action: "ROLE_CHANGED", to: role });
     return { ok: true };

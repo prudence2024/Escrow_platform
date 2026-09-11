@@ -38,6 +38,9 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 function RouteSyncer() {
   const location = useLocation();
   useEffect(() => {
+    // Only announce when actually embedded; a top-level app has no parent
+    // listener and the broadcast would be pointless surface.
+    if (window.self === window.top) return;
     window.parent.postMessage(
       { type: "iframe-route-change", path: location.pathname },
       "*",
@@ -45,7 +48,19 @@ function RouteSyncer() {
   }, [location.pathname]);
 
   useEffect(() => {
+    // Extra embed origins allowed to drive navigation, configured via
+    // VITE_TRUSTED_EMBED_ORIGINS (comma-separated). Same origin always ok.
+    const extra = (
+      import.meta.env.VITE_TRUSTED_EMBED_ORIGINS as string | undefined
+    )
+      ?.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean) ?? [];
+    const trustedOrigins = new Set([window.location.origin, ...extra]);
     function handleMessage(event: MessageEvent) {
+      // Never obey navigation commands from untrusted origins. Previously
+      // this accepted "*" — an arbitrary framing page could drive history.
+      if (!trustedOrigins.has(event.origin)) return;
       if (event.data?.type === "navigate") {
         if (event.data.direction === "back") window.history.back();
         if (event.data.direction === "forward") window.history.forward();

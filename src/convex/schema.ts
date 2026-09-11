@@ -244,13 +244,22 @@ const schema = defineSchema({
   delivery_otps: defineTable({
     transactionId: v.id("transactions"),
     deliveryId: v.id("deliveries"),
-    codeHash: v.string(),
+    // HMAC-SHA256 hex digest (server secret + per-record context). Plaintext
+    // OTP is NEVER stored. Legacy dev rows holding plaintext fail closed.
+    codeDigest: v.string(),
     expiresAt: v.number(),
     attempts: v.number(),
     consumedAt: v.optional(v.number()),
   })
     .index("by_transaction", ["transactionId"])
     .index("by_delivery", ["deliveryId"]),
+
+  // Persistent server-side rate-limit buckets (Phase 2).
+  rate_limit_counters: defineTable({
+    key: v.string(),
+    windowStart: v.number(),
+    count: v.number(),
+  }).index("by_key", ["key"]),
 
   // ----- Disputes -----
   disputes: defineTable({
