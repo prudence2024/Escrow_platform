@@ -38,16 +38,16 @@ describe("migration runner", () => {
   it("loads 10 ordered migrations", () => {
     const files = loadMigrations(REPO_MIGRATIONS_DIR);
     expect(files.map((f) => f.version)).toEqual([
-      "001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011",
+      "001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012",
     ]);
   });
 
   it("fresh DB migrates fully and records every version", async () => {
     const result = await runMigrations(db(), REPO_MIGRATIONS_DIR);
-    expect(result.applied).toHaveLength(11);
+    expect(result.applied).toHaveLength(12);
     expect(result.skipped).toHaveLength(0);
     const applied = await appliedMigrations(db());
-    expect(applied.size).toBe(11);
+    expect(applied.size).toBe(12);
     for (const [version, record] of applied) {
       expect(record.checksum).toMatch(/^[0-9a-f]{64}$/);
       expect(record.filename.startsWith(version)).toBe(true);
@@ -101,7 +101,7 @@ describe("migration runner", () => {
   it("rerun applies nothing (idempotent, no reapplication)", async () => {    await runMigrations(db(), REPO_MIGRATIONS_DIR);
     const second = await runMigrations(db(), REPO_MIGRATIONS_DIR);
     expect(second.applied).toHaveLength(0);
-    expect(second.skipped).toHaveLength(11);
+    expect(second.skipped).toHaveLength(12);
   });
 
   it("modified applied migration fails loudly (checksum)", async () => {
@@ -109,14 +109,14 @@ describe("migration runner", () => {
     const drifted = await openTestDb();
     try {
       const first = await runMigrations(drifted, dir);
-      expect(first.applied).toHaveLength(11);
+      expect(first.applied).toHaveLength(12);
       // Edit an already-applied file (simulates history tampering).
       const victim = join(dir, "002_transactions.sql");
       writeFileSync(victim, "\n-- tampered after apply\n", { flag: "a" });
       await expect(runMigrations(drifted, dir)).rejects.toThrow(MigrationChecksumError);
       // The database is untouched by the refused run: still 10 records.
       const applied = await appliedMigrations(drifted);
-      expect(applied.size).toBe(11);
+      expect(applied.size).toBe(12);
     } finally {
       drifted.close();
       removeTempDir(dir);
