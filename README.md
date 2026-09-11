@@ -28,14 +28,24 @@ The project runs cloud-side with Convex already configured
 (`VITE_CONVEX_URL` / `CONVEX_DEPLOYMENT` set in the environment).
 
 ```bash
-bun install        # install deps
-bunx convex dev --once   # push Convex functions + regenerate types
-bun dev            # start the Vite dev server
-bun tsc -b --noEmit   # typecheck
+npm install        # install deps (npm is the authoritative package manager;
+                   # see "Package manager" below — package-lock.json is the lockfile)
+npx convex dev --once   # push Convex functions + regenerate types
+npm run dev        # start the Vite dev server
+npx tsc -b --noEmit   # typecheck
 ```
 
-To skip generated-type drift, run `bunx convex dev --once` again after any
+To skip generated-type drift, run `npx convex dev --once` again after any
 change under `src/convex/`.
+
+## Package manager
+
+**npm** is the authoritative package manager for the active DealSure
+implementation (`packageManager: npm@10.9.3`, `package-lock.json`).
+A legacy `bun.lock` was removed because Bun is unavailable in the validated
+development environment and the stale Bun lockfile (missing test
+dependencies) was less reproducible than an explicit npm decision.
+Use `npm ci` for clean installs. Convex commands run via `npx`.
 
 ## Demoing the protected-transaction flow
 
