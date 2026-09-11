@@ -270,7 +270,7 @@ during Phase 2–4, contract before live pilot).
 8. Tests: authz matrix tests (A-cannot-read/modify-B, forged role/ID rejected, expired/revoked denied) — harness first, cases grow per phase.
 9. Security review + typecheck + lint + build; STOP for approval before Phase 3.
 
-## 9. Phase 2 outcome (auth foundation � implemented, see Phase 2 report)
+## 9. Phase 2 outcome (auth foundation � implemented, see Phase 2 report)
 
 - AuthService abstraction exists (`src/lib/auth/*`, `src/convex/authService.ts`, `authz.ts`); `useAuth().principal` is the UI seam.
 - Freebuff federated JWT RETIRED from auth trust (code + env + docs).
@@ -278,6 +278,33 @@ during Phase 2–4, contract before live pilot).
 - Canonical 8-role vocabulary + capability map + tx-context guards live; forged roles resolve to zero.
 - Delivery OTP P0 FIXED (CSPRNG + HMAC digest + 10-min TTL + single-live-code + dev-gated reveal); legacy rows fail closed.
 - Rate limits enforced where a stable server key exists; OTP-send/invite-lookup/IP honestly deferred.
-- Step-up registry + `requireStepUp` wired to role.change + refund.approve; production denies without MFA (BLOCKED pending MFA-capable authenticator � not faked).
+- Step-up registry + `requireStepUp` wired to role.change + refund.approve; production denies without MFA (BLOCKED pending MFA-capable authenticator � not faked).
 - Headers at the real static layer; postMessage origin-pinned; CSP documented as deployment work.
 - vitest harness: 33 tests passing. P0-2/P0-3/P0-4 untouched per scope (Phases 11/13).
+
+## 10. Phase 3 outcome (Turso database foundation — parallel scaffolding, zero cutover)
+
+GENUINELY IMPLEMENTED in Phase 3 (all validated below; Convex app untouched):
+
+- `@libsql/client` + `tsx` added via npm; `npm run migrate` / `npm run seed:dev` scripts.
+- `server/config/env.ts`: explicit modes (cloud/file/memory), production fail-closed (tested).
+- `server/db/client.ts`: server-only factory (browser import throws), FK pragma on every connection (verified).
+- `server/db/migrate.ts` + `migrate-cli.ts`: ordered files, `_schema_migrations` with SHA-256, atomic apply via interactive transactions, no rerun, checksum drift = loud failure.
+- `server/db/migrations/001–010`: 35 tables, STRICT (verified: INTEGER rejects TEXT/REAL; documented TEXT-direction limit), FKs everywhere, closed CHECK lists, UNIQUE + partial-unique guards (one OPEN dispute, one PAID settlement per tx), full index strategy, ledger chart seeded.
+- `server/domain/ids.ts` (UUID/public-ref/96-bit slug) + `server/domain/money.ts` (minor-unit guards, MAX_SAFE_INTEGER, ₦50–₦10M bounds).
+- 12 repository interfaces (`server/repositories/interfaces/`); implementations deferred to service phases.
+- `server/db/seed/dev.ts`: synthetic 11-state seed, refuses production (tested), git-ignored dev DB default.
+- `server/migration/convexExport.ts`: explicit-artifact dry-run inspector only (no auto-connect, no writes).
+- Docs: `convex-to-turso-map.md` (27 Convex tables classified), `convex-to-turso-reconciliation.md` (cutover gates), `turso-development-architecture.md` (decisions incl. STRICT limits, INTEGER-ms time, ledger honesty). Cloud-Turso connectivity unverified (no credentials) — local libSQL only.
+
+EXPLICITLY NOT IMPLEMENTED (do not mark complete): Node API, repository implementations, services, frontend cutover, real payments/settlements/KYC, provider execution, production data, Convex traffic migration.
+
+## 11. Phase 3A hardening (frozen with baseline migrations 001–011)
+
+- Invite slugs raised 96→128-bit CSPRNG (`newInviteSlug` enforces 32 hex).
+- `payment_events` dedup scoped to `(payment_intent_id, provider_event_id)`; webhook inbox stays `(provider, provider_event_id)`; retries use fresh idempotency keys (transaction_id deliberately not unique on intents).
+- Migration 011 adds BEFORE UPDATE/DELETE ABORT triggers on ledger/audit/payment-events/status-history/delivery-events; webhook inbox, OTP rows, notifications, and status workflows stay stateful by design. Mutation tests prove both directions.
+- One-OPEN-dispute race tested (partial unique index is the backstop).
+- Identifier/capability/identity distinction, message-trust rule, money ceiling rationale, freeze rule (001–011 immutable; future work uses 012+), and cloud smoke-test gate documented in `turso-development-architecture.md`.
+- Cloud Turso remains UNVERIFIED (no credentials) — not a blocker for the local-architecture freeze.
+
