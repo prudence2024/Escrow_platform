@@ -16,6 +16,7 @@ import { createConsoleLogger } from "../observability/logger.js";
 import { TursoTransactionRepository } from "../repositories/TursoTransactionRepository.js";
 import { TursoUserRepository } from "../repositories/TursoUserRepository.js";
 import { TransactionQueryService } from "../services/TransactionQueryService.js";
+import { TransactionDraftService } from "../services/TransactionDraftService.js";
 import { UserQueryService } from "../services/UserQueryService.js";
 
 const AT = 1780000000000;
@@ -60,17 +61,19 @@ function testApp(auth: TestPrincipalAuth | DenyAllAuth): Hono<ApiEnv> {
   return createApp({
     auth,
     txService: new TransactionQueryService(txRepo, userRepo),
+    draftService: null,
     userService: new UserQueryService(userRepo),
     checkReadiness: async () => {
       try {
         await db.execute("SELECT 1");
-        return { ready: true, migrations: { applied: 12, expected: 12 } };
+        return { ready: true, migrations: { applied: 13, expected: 13 } };
       } catch {
-        return { ready: false, migrations: { applied: 0, expected: 12 } };
+        return { ready: false, migrations: { applied: 0, expected: 13 } };
       }
     },
     corsAllowedOrigins: [],
     logger: createConsoleLogger(),
+    writeEnabled: false,
   });
 }
 
@@ -104,7 +107,7 @@ describe("infrastructure routes", () => {
   it("GET readiness reports counts", async () => {
     const res = await authApp().request("/api/v1/readiness");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ready: true, migrations: { applied: 12, expected: 12 } });
+    expect(await res.json()).toEqual({ ready: true, migrations: { applied: 13, expected: 13 } });
   });
 
   it("unknown routes return the 404 envelope (no stack, has requestId)", async () => {

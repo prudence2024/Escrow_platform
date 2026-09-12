@@ -54,6 +54,7 @@ export interface Transaction {
   inspectionWindowDays: number | null;
   returnTerms: string | null;
   disputeBlocked: boolean;
+  version: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -104,4 +105,44 @@ export interface TransactionRepository {
   addParticipant(input: Omit<Participant, "id">): Promise<Participant>;
   participants(transactionId: string): Promise<Participant[]>;
   history(transactionId: string): Promise<StatusHistoryEntry[]>;
+
+  /** Atomic draft create: transaction + participant + items + status-history + idempotency + audit. */
+  createDraft(input: {
+    transaction: Omit<Transaction, "createdAt" | "updatedAt" | "version">;
+    participant: Participant;
+    items: Array<{ name: string; note: string | null; quantity: number; unitAmountMinor: number }>;
+    statusHistoryId: string;
+    auditEventId: string;
+    idempotencyKey: string;
+    idempotencyScope: string;
+    idempotencyActorId: string;
+    idempotencyRequestHash: string;
+    idempotencyResultId: string;
+  }): Promise<Transaction>;
+
+  /** Find a draft owned by the given profile for editing. Returns null if not found/not owner/not DRAFT. */
+  findDraftForOwner(publicReference: string, ownerProfileId: string): Promise<Transaction | null>;
+
+  /** Optimistic-concurrency update of a DRAFT. Returns null if version mismatch. */
+  updateDraft(
+    publicReference: string,
+    ownerProfileId: string,
+    expectedVersion: number,
+    patch: {
+      title?: string;
+      description?: string;
+      category?: string;
+      deliveryFeeMinor?: number;
+      inspectionWindowDays?: number | null;
+      sellerTerms?: string | null;
+    },
+    amountMinor: number,
+    totalMinor: number,
+    platformFeeMinor: number,
+    items: Array<{ name: string; note: string | null; quantity: number; unitAmountMinor: number }>,
+    auditEventId: string,
+  ): Promise<Transaction | null>;
+
+  /** List items for a transaction. */
+  listItems(transactionId: string): Promise<Array<{ name: string; note: string | null; quantity: number; unitAmountMinor: number }>>;
 }

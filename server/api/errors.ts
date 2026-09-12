@@ -13,7 +13,13 @@ export type ApiErrorCode =
   | "CONFLICT"
   | "DATABASE_UNAVAILABLE"
   | "SERVICE_UNAVAILABLE"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "IDEMPOTENCY_REQUIRED"
+  | "IDEMPOTENCY_CONFLICT"
+  | "VERSION_CONFLICT"
+  | "DRAFT_NOT_EDITABLE"
+  | "AMOUNT_LIMIT_EXCEEDED"
+  | "WRITE_NOT_ENABLED";
 
 export class ApiError extends Error {
   readonly code: ApiErrorCode;
@@ -50,6 +56,24 @@ export function databaseUnavailable(): ApiError {
   return new ApiError("DATABASE_UNAVAILABLE", 503, "Service temporarily unavailable");
 }
 
+export const idempotencyRequired = (message = "Idempotency-Key header required"): ApiError =>
+  new ApiError("IDEMPOTENCY_REQUIRED", 400, message);
+
+export const idempotencyConflict = (message = "Idempotency conflict"): ApiError =>
+  new ApiError("IDEMPOTENCY_CONFLICT", 409, message);
+
+export const versionConflict = (message = "Version conflict"): ApiError =>
+  new ApiError("VERSION_CONFLICT", 409, message);
+
+export const draftNotEditable = (message = "Draft is no longer editable"): ApiError =>
+  new ApiError("DRAFT_NOT_EDITABLE", 409, message);
+
+export const amountLimitExceeded = (message = "Amount exceeds business limit"): ApiError =>
+  new ApiError("AMOUNT_LIMIT_EXCEEDED", 400, message);
+
+export const writeNotEnabled = (message = "Write operations are not enabled"): ApiError =>
+  new ApiError("WRITE_NOT_ENABLED", 403, message);
+
 export interface ErrorEnvelope {
   error: { code: ApiErrorCode; message: string; requestId: string };
 }
@@ -65,6 +89,10 @@ export function toEnvelope(error: ApiError, requestId: string): ErrorEnvelope {
  */
 export function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
+  // MoneyError: has .name = "MoneyError" but no .code property — check by name.
+  if (error instanceof Error && error.name === "MoneyError") {
+    return badRequest(error.message);
+  }
   if (error !== null && typeof error === "object" && "code" in error) {
     const code = String((error as Record<string, unknown>)["code"]);
     if (code === "UNAUTHENTICATED") return unauthenticated();

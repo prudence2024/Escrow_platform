@@ -18,6 +18,7 @@ import { createConsoleLogger } from "../observability/logger.js";
 import { TursoTransactionRepository } from "../repositories/TursoTransactionRepository.js";
 import { TursoUserRepository } from "../repositories/TursoUserRepository.js";
 import { TransactionQueryService } from "../services/TransactionQueryService.js";
+import { TransactionDraftService } from "../services/TransactionDraftService.js";
 import { UserQueryService } from "../services/UserQueryService.js";
 
 const AT = 1780000000000;
@@ -91,10 +92,12 @@ function convexApp(jwks: unknown, issuer: string = ISSUER): Hono<ApiEnv> {
   return createApp({
     auth,
     txService: new TransactionQueryService(txRepo, userRepo),
+    draftService: null,
     userService: new UserQueryService(userRepo),
-    checkReadiness: async () => ({ ready: true, migrations: { applied: 12, expected: 12 } }),
+    checkReadiness: async () => ({ ready: true, migrations: { applied: 13, expected: 13 } }),
     corsAllowedOrigins: [],
     logger: createConsoleLogger(),
+    writeEnabled: false,
   });
 }
 

@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { DenyAllAuth } from "../auth/apiAuth.js";
 import type { ApiAuth } from "../auth/apiAuth.js";
 import { resolveApiAuthMode } from "../auth/authModes.js";
+import { resolveApiWriteMode } from "../auth/writeModes.js";
 import { createConvexAuth } from "../auth/convexAuthMode.js";
 import { tursoRoleLoader } from "../auth/roleLoader.js";
 import { createConsoleLogger } from "../observability/logger.js";
@@ -33,6 +34,7 @@ import { createApp } from "./app.js";
 import { TursoTransactionRepository } from "../repositories/TursoTransactionRepository.js";
 import { TursoUserRepository } from "../repositories/TursoUserRepository.js";
 import { TransactionQueryService } from "../services/TransactionQueryService.js";
+import { TransactionDraftService } from "../services/TransactionDraftService.js";
 import { UserQueryService } from "../services/UserQueryService.js";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "db", "migrations");
@@ -87,9 +89,17 @@ async function main(): Promise<void> {
     auth = await createConvexAuth(process.env, tursoRoleLoader(client));
     logger.log("info", "convex auth verifier ready", {});
   }
+  // Write mode: disabled by default. draft-development permitted only outside production.
+  const writeMode = resolveApiWriteMode(process.env);
+  const writeEnabled = writeMode === "draft-development";
+  if (writeEnabled) {
+    logger.log("info", "write mode: draft-development", {});
+  }
+  const draftService = writeEnabled ? new TransactionDraftService(txRepo) : null;
   const app = createApp({
     auth,
     txService: new TransactionQueryService(txRepo, userRepo),
+    draftService,
     userService: new UserQueryService(userRepo),
     checkReadiness: async () => {
       try {
@@ -103,6 +113,7 @@ async function main(): Promise<void> {
     },
     corsAllowedOrigins: serverConfig.corsAllowedOrigins,
     logger,
+    writeEnabled,
   });
 
   const server = serve({ fetch: app.fetch, port: serverConfig.port }, (info) => {
