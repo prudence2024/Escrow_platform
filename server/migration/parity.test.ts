@@ -111,4 +111,20 @@ describe("parity engine", () => {
     );
     expect(report.findings.some((f) => f.code === "ORPHAN_RELATION")).toBe(true);
   });
+
+  it("multi-role sets compare as sets (order-free match, divergence fails)", () => {
+    const multi = (roles: string[]): ParitySnapshot => ({
+      exportedAt: 1,
+      source: "test",
+      profiles: [{ email: "ops@dev.test", displayName: null, roles }],
+      transactions: [],
+    });
+    expect(
+      compareParity(multi(["operations", "support"]), multi(["support", "operations"])).findings,
+    ).toEqual([]);
+    const divergent = compareParity(multi(["operations", "support"]), multi(["operations"]));
+    expect(
+      divergent.findings.some((f) => f.code === "FIELD_MISMATCH" && f.field === "roles"),
+    ).toBe(true);
+  });
 });

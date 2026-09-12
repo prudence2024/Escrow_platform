@@ -108,4 +108,18 @@ describe("dev import", () => {
       }),
     ).rejects.toThrow(ImportRefusedError);
   });
+
+  it("imported transactions carry exact money (binding-integrity proof)", async () => {
+    await importArtifact(db(), artifact(), { dryRun: false, target: LOCAL_TARGET, nowMs: AT });
+    const rs = await db().execute(
+      "SELECT amount_minor AS a, delivery_fee_minor AS d, platform_fee_minor AS p, total_minor AS t, status AS s FROM transactions WHERE id = 'jx-tx-1'",
+    );
+    expect(rs.rows).toHaveLength(1);
+    const row = rs.rows[0] as Record<string, unknown>;
+    expect(Number(row["a"])).toBe(2500000);
+    expect(Number(row["d"])).toBe(100000);
+    expect(Number(row["p"])).toBe(0);
+    expect(Number(row["t"])).toBe(2600000);
+    expect(String(row["s"])).toBe("PAYMENT_SECURED");
+  });
 });
