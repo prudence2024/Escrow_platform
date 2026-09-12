@@ -13,6 +13,34 @@ async function txByRef(ctx: MutationCtx, reference: string) {
   return ctx.db.query("transactions").withIndex("by_slug", (q) => q.eq("slug", reference)).first();
 }
 
+/**
+ * Compute how many kobo can still be refunded on a transaction.
+ *   remainingRefundable = totalKobo − Σ(paid refunds) − Σ(paid settlements)
+ *
+ * This prevents over-refunding when:
+ *  • multiple disputes each request a refund
+ *  • a refund is requested after partial/full settlement
+ */
+export async function remainingRefundable(ctx: MutationCtx, txId: string, totalKobo: number): Promise<number> {
+  // Sum all PAID refunds for this transaction
+  const paidRefunds = await ctx.db
+    .query("refunds")
+    .withIndex("by_transaction", (q) => q.eq("transactionId", txId as any))
+    .filter((q) => q.eq(q.field("status"), "PAID"))
+    .collect();
+  const totalRefunded = paidRefunds.reduce((sum, r) => sum + r.amountKobo, 0);
+
+  // Sum all PAID settlements for this transaction
+  const paidSettlements = await ctx.db
+    .query("settlements")
+    .withIndex("by_transaction", (q) => q.eq("transactionId", txId as any))
+    .filter((q) => q.eq(q.field("status"), "PAID"))
+    .collect();
+  const totalSettled = paidSettlements.reduce((sum, s) => sum + s.amountKobo, 0);
+
+  return Math.max(0, totalKobo - totalRefunded - totalSettled);
+}
+
 /** Buyer opens a dispute: blocks settlement, moves the transaction to DISPUTED. */
 export const open = mutation({
   args: { reference: v.string(), reason: v.string(), details: v.optional(v.string()) },
@@ -127,6 +155,7 @@ export const resolveDispute = mutation({
     if (!tx) throw new Error("Transaction not found");
 
     if (dispute.transactionId !== tx._id) throw new Error("Mismatch");
+    const txStatusAtRead = tx.status;
     await ctx.db.patch(disputeId, {
       status: "RESOLVED",
       resolution: decision,
@@ -136,7 +165,14 @@ export const resolveDispute = mutation({
     });
 
     if (decision === "seller_settlement") {
-      // release to seller
+      // release to seller — re-read transaction to ensure freshness after dispute patch
+      const freshTx = await ctx.db.get(tx._id);
+      if (!freshTx) throw new Error("Transaction not found");
+      if (freshTx.status !== txStatusAtRead) {
+        if (freshTx.status === STATUSES.SETTLED) return { decision, outcome: STATUSES.SETTLED };
+        if (freshTx.status === STATUSES.REFUNDED) return { decision, outcome: STATUSES.REFUNDED };
+        throw new Error(`Transaction status changed during dispute resolution`);
+      }
       await performTransition(ctx, { transactionDoc: tx, to: STATUSES.RELEASE_PENDING, actorId: staff._id, reason: "Admin resolved in favor of seller" });
       await ctx.db.patch(tx._id, { disputeBlocked: false });
       const { releaseTx } = await import("./settlement");
@@ -146,8 +182,23 @@ export const resolveDispute = mutation({
     }
 
     // buyer refund (full or partial)
+    // CAS freshness check before financial mutation
+    const txBeforeRefund = await ctx.db.get(tx._id);
+    if (!txBeforeRefund) throw new Error("Transaction not found");
+    if (txBeforeRefund.status !== txStatusAtRead) {
+      if (txBeforeRefund.status === STATUSES.SETTLED) return { decision, outcome: STATUSES.SETTLED };
+      if (txBeforeRefund.status === STATUSES.REFUNDED) return { decision, outcome: STATUSES.REFUNDED };
+      throw new Error(`Transaction status changed during dispute resolution`);
+    }
+
     const refundAmount = decision === "partial_refund" ? (refundKobo ?? 0) : tx.totalKobo;
     if (refundAmount <= 0) throw new Error("Refund amount must be positive");
+
+    // Refund cap: remainingRefundable = totalKobo − already_refunded − already_settled
+    const cap = await remainingRefundable(ctx, tx._id, tx.totalKobo);
+    if (refundAmount > cap) {
+      throw new Error(`Refund amount ${refundAmount} exceeds remaining refundable ${cap} (already refunded: ${tx.totalKobo - cap})`);
+    }
     // Privileged financial approval: step-up MFA gate (Decision F). Dev:
     // audit-logged bypass. Production without MFA: denied.
     await requireStepUp(ctx, "refund.approve", String(disputeId), String(staff._id));

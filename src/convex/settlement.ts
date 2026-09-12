@@ -32,6 +32,8 @@ export async function releaseTx(ctx: MutationCtx, args: { publicId: string; acto
     throw new Error(`Transaction is not eligible for settlement (${tx.status})`);
   }
 
+  const statusAtRead = tx.status;
+
   // settlement-blocked while an OPEN dispute exists
   const openDispute = await ctx.db
     .query("disputes")
@@ -39,6 +41,16 @@ export async function releaseTx(ctx: MutationCtx, args: { publicId: string; acto
     .filter((q) => q.eq(q.field("status"), "OPEN"))
     .first();
   if (openDispute) throw new Error("Settlement blocked by an open dispute");
+
+  // CAS freshness check: re-read transaction to ensure no concurrent mutation
+  // changed it between our initial read and the dispute check (cross-document race).
+  const freshTx = await ctx.db.get(tx._id);
+  if (!freshTx) throw new Error("Transaction not found");
+  if (freshTx.status !== statusAtRead) {
+    // Status changed — another mutation raced us. If now SETTLED, return idempotent.
+    if (freshTx.status === STATUSES.SETTLED) return { status: STATUSES.SETTLED, alreadyProcessed: true };
+    throw new Error(`Transaction status changed during settlement (was ${statusAtRead}, now ${freshTx.status})`);
+  }
 
   // payment must have been server-verified
   const securedIntent = await ctx.db

@@ -2,7 +2,7 @@ import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { STATUSES, SECURED_WORDING, PROVIDER } from "./config";
 import { performTransition, audit, notify, postDoubleEntry, genPublicId, now } from "./lib";
-import { requireNonGuestUser } from "./authz";
+import { requireNonGuestUser, requireStaff } from "./authz";
 import { getProvider } from "./payments/providers";
 import type { MutationCtx } from "./_generated/server";
 
@@ -79,21 +79,22 @@ export const requestPayment = mutation({
 });
 
 /**
- * Buyer-facing completion of the (mock) provider checkout. This invokes the
- * provider's handleWebhook (server-side verification) which is the only thing
- * that may move PAYMENT_PROCESSING -> PAYMENT_SECURED. A replay with the same
- * idempotencyKey is safe and returns the already-verified result.
+ * Provider webhook handler / sandbox payment confirmation.
+ *
+ * SECURITY: This mutation is gated to staff-only to prevent a buyer from
+ * confirming their own payment. In production, this must be replaced with a
+ * provider-signed webhook endpoint that verifies the signature before calling
+ * this logic. The buyer MUST never be able to trigger payment confirmation.
+ *
+ * Sandbox: staff (admin/ops) can trigger this to simulate provider callback.
  */
 export const confirmPayment = mutation({
   args: { reference: v.string(), idempotencyKey: v.string() },
   handler: async (ctx, { reference, idempotencyKey }) => {
-    // NOTE (Phase 11): this mock confirmation path is buyer-triggered by
-    // design for sandbox only. A live provider MUST replace it with a
-    // provider-signed webhook; never carry this pattern to live money.
-    const { user } = await requireNonGuestUser(ctx);
+    // Staff-only: buyer cannot confirm their own payment
+    const staff = await requireStaff(ctx);
     const tx = await getTxByReference(ctx, reference);
     if (!tx) throw new Error("Transaction not found");
-    if (tx.buyerId !== user._id) throw new Error("Only the buyer can confirm this payment");
 
     if (tx.status === STATUSES.PAYMENT_SECURED) {
       // already secured -> idempotent success
@@ -151,7 +152,7 @@ export const confirmPayment = mutation({
     await performTransition(ctx, {
       transactionDoc: tx,
       to: STATUSES.PAYMENT_SECURED,
-      actorId: user._id,
+      actorId: staff._id,
       reason: "Payment verified via provider webhook",
     });
     await notify(ctx, {
@@ -161,7 +162,7 @@ export const confirmPayment = mutation({
       body: `Payment for "${tx.title}" has been verified. You can now deliver.`,
       transactionId: tx._id,
     });
-    await audit(ctx, { entityType: "payment_intent", entityId: intent._id, actorId: user._id, action: "PAYMENT_VERIFIED", to: "SECURED", meta: JSON.stringify({ amountKobo: tx.totalKobo, provider: intent.provider }) });
+    await audit(ctx, { entityType: "payment_intent", entityId: intent._id, actorId: staff._id, action: "PAYMENT_VERIFIED", to: "SECURED", meta: JSON.stringify({ amountKobo: tx.totalKobo, provider: intent.provider }) });
     return { status: STATUSES.PAYMENT_SECURED, wording: SECURED_WORDING.primary, alreadyProcessed: false };
   },
 });
