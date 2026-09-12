@@ -27,6 +27,14 @@ auto-repair, no reconciliation writes, no preference, no production data.
    `MATCH`, `MISSING_IN_CONVEX`, `MISSING_IN_TURSO`, `FIELD_MISMATCH`,
    `MONEY_MISMATCH` (exact integers), `UNMAPPED_STATUS`, `ORPHAN_RELATION`.
 
+## One-command rehearsal (synthetic fixtures only)
+
+`npm run parity:rehearse [-- --db file:./parity-rehearsal.db]` runs the full
+loop against the built-in rich fixture (16 states, retries, disputes,
+refunds, settlements, roles): fresh local DB → migrate → import → both
+snapshots → compare → JSON report (exit 1 on any finding). Default target
+is git-ignored `./parity-rehearsal.db`; production environments refuse.
+
 ## Failure handling
 
 - Any finding besides full MATCH blocks cutover talk for that entity.

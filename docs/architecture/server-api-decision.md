@@ -73,6 +73,27 @@ cookie dependence, no browser-only assumptions. Lifetimes: 1h access +
 30-day rotating refresh (provider-managed). Replay risk bounded by
 short-lived, audience-bound tokens over HTTPS; revocation = 1h window.
 
+## Auth modes + development wiring (Phase 6)
+
+- `API_AUTH_MODE=deny` (default everywhere, including dev): protected
+  routes 401. `convex`: explicit opt-in requiring `CONVEX_ISSUER_URL`
+  (explicit https, never guessed) + optional `CONVEX_AUDIENCE` (default
+  `"convex"`, the audited value). Unknown mode values fail closed (throw).
+- `convex` mode fetches OIDC discovery + JWKS at startup (10s timeout,
+  shape-validated); ANY discovery/JWKS failure is startup-fatal — the
+  server never runs degraded. Only `Authorization: Bearer` is read
+  (never query/body/custom headers).
+- Roles load from Turso `user_roles` via `tursoRoleLoader` (canonical
+  vocabulary only; unknown strings dropped). Identity mapping is
+  deterministic preserved-ID in development (importer keeps artifact IDs);
+  an explicit persisted provider-subject mapping remains the cutover
+  design. Role authority: Convex authoritative until cutover; the Turso
+  mirror serves development API auth only after role parity (§12 scenarios
+  tested: baseline/seller/operations/super_admin/multi-role/unknown-legacy).
+- Production stays `deny` — development wiring succeeding changes nothing
+  about production readiness (live discovery, reachability, ops review,
+  role cutover, and MFA gates all still required).
+
 ## Read-only scope
 
 Phase 4 implements reads only (transactions, invite preview, profiles) plus

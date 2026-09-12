@@ -316,10 +316,18 @@ EXPLICITLY NOT IMPLEMENTED (do not mark complete): Node API, repository implemen
 - No writes, no cutover, no payments, no deployments. Turso remains the read-validation target, not the source of truth.
 
 ## 13. Phase 5 outcome (parity + auth bridge; still no writes)
-
 - Auth bridge: SUPPORTED_WITH_PROVIDER_CONFIGURATION. Installed-SDK audit proved RS256 session JWTs + official OIDC discovery + `useAuthToken()` hook; `ConvexJwtVerifier` implemented and tested (JWKS/issuer/audience/expiry, trusted role loader, 9 tests). Production stays DenyAllAuth — no live Convex deployment or reachability exists here to complete the configuration.
 - Parity model: provider-independent snapshots keyed by business identity (email, public reference); exact-integer money; explicit UNMAPPED_STATUS failures; orphan detection.
 - Dev import: explicit-artifact, dry-run, validated, idempotent (stable IDs + OR IGNORE, history never updated), OTP/ledger rows skipped by policy, production-cloud refused unconditionally.
 - Shadow mode: `SHADOW_READ_MODE=off|compare` (default off, production forces off); CLI-only diagnostics, no request coupling, no writes either side.
 - Runbook + reconciliation process documented. Read parity demonstrated on synthetic fixtures via the import→snapshot→compare loop (see test suite); production parity remains a future cutover gate, not a claim.
+
+## 14. Phase 6 outcome (dev auth wiring + rich parity; still no writes)
+
+- `API_AUTH_MODE=deny|convex` (default deny everywhere; unknown values throw; convex requires explicit `CONVEX_ISSUER_URL`, aud defaults to audited `"convex"`). Discovery/JWKS failures are startup-fatal; only `Authorization: Bearer` is read.
+- `tursoRoleLoader` reads canonical roles from Turso `user_roles`; identity mapping is deterministic preserved-ID in dev (explicit mapping table deferred to cutover design). Role authority: Convex authoritative until cutover; Turso mirror for dev auth only after role parity.
+- Rich fixture (16/16 states + retry FAILED→SECURED + OPEN/RESOLVED disputes + PENDING/PAID refunds/settlements + terms/notifications) rehearses to zero findings via `npm run parity:rehearse`.
+- Importer hardened in passing: fee/quantity passthrough, terms/evidence collections, explicit policy-skips, placeholder/arg-count guard, immutable-history conflict pre-flight.
+- Cloud smoke tooling ready (`npm run turso:smoke`, strict environment gate) but NOT EXECUTED — no credentials; remains a pre-cutover gate.
+- Production API auth NOT ready (DenyAllAuth stands; live discovery, reachability, ops review, role cutover, MFA gates outstanding). No writes, no cutover, no deployments.
 

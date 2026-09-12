@@ -213,3 +213,20 @@ Nothing here modifies the frozen Supabase reference branch.
 - Bearer transport analysis (no new cookies/CSRF; PWA token storage
   unchanged; native-compatible via secure storage; 1h revocation window
   identical to Convex semantics) recorded in `server-api-decision.md`.
+
+## 8. Phase 6 outcome — development auth wiring (deny still default)
+
+- `API_AUTH_MODE` introduced (`deny` default everywhere; `convex` opt-in;
+  unknown values throw). `convex` mode requires explicit `CONVEX_ISSUER_URL`
+  and fetches OIDC discovery + JWKS at startup (10s timeout, shape-checked);
+  any failure is startup-fatal. Only `Authorization: Bearer` is honored.
+- `tursoRoleLoader` implements the RoleLoader seam against Turso
+  `user_roles`; identity mapping is deterministic preserved-ID for
+  development (cutover mapping table deferred and documented).
+- Role authority: Convex remains authoritative; Turso mirror is dev-only
+  after role parity (baseline/seller/operations/super_admin/multi-role/
+  unknown-legacy scenarios tested).
+- Authenticated-route tests cover the 401 matrix, forged-identity ignorance,
+  trusted role loading, and stranger denial through the real verifier.
+- Production auth is NOT ready: DenyAllAuth remains wired; live discovery,
+  reachability, ops review, role cutover, and MFA gates are outstanding.
