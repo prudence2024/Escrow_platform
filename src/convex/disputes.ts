@@ -1,6 +1,6 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { STATUSES } from "./config";
+import { STATUSES, feeFor } from "./config";
 import { requireStaff, performTransition, audit, notify, postDoubleEntry, genPublicId, now } from "./lib";
 import { requireNonGuestUser, requireStepUp } from "./authz";
 import { checkRateLimit } from "./rateLimits";
@@ -15,13 +15,20 @@ async function txByRef(ctx: MutationCtx, reference: string) {
 
 /**
  * Compute how many kobo can still be refunded on a transaction.
- *   remainingRefundable = totalKobo − Σ(paid refunds) − Σ(paid settlements)
+ *
+ *   refundableBase = totalKobo − feeKobo  (platform fee is non-refundable)
+ *   remainingRefundable = refundableBase − Σ(paid refunds) − Σ(paid settlements)
  *
  * This prevents over-refunding when:
  *  • multiple disputes each request a refund
  *  • a refund is requested after partial/full settlement
+ *  • platform fees are non-refundable
  */
 export async function remainingRefundable(ctx: MutationCtx, txId: string, totalKobo: number): Promise<number> {
+  // Platform fee is non-refundable — subtract from base
+  const { feeKobo } = feeFor(totalKobo);
+  const refundableBase = Math.max(0, totalKobo - feeKobo);
+
   // Sum all PAID refunds for this transaction
   const paidRefunds = await ctx.db
     .query("refunds")
@@ -38,7 +45,7 @@ export async function remainingRefundable(ctx: MutationCtx, txId: string, totalK
     .collect();
   const totalSettled = paidSettlements.reduce((sum, s) => sum + s.amountKobo, 0);
 
-  return Math.max(0, totalKobo - totalRefunded - totalSettled);
+  return Math.max(0, refundableBase - totalRefunded - totalSettled);
 }
 
 /** Buyer opens a dispute: blocks settlement, moves the transaction to DISPUTED. */
@@ -145,8 +152,9 @@ export const resolveDispute = mutation({
     decision: v.union(v.literal("seller_settlement"), v.literal("buyer_refund"), v.literal("partial_refund")),
     refundKobo: v.optional(v.number()),
     note: v.optional(v.string()),
+    idempotencyKey: v.optional(v.string()),
   },
-  handler: async (ctx, { disputeId, decision, refundKobo, note }) => {
+  handler: async (ctx, { disputeId, decision, refundKobo, note, idempotencyKey }) => {
     const staff = await requireStaff(ctx);
     const dispute = await ctx.db.get(disputeId);
     if (!dispute) throw new Error("Dispute not found");
@@ -194,10 +202,22 @@ export const resolveDispute = mutation({
     const refundAmount = decision === "partial_refund" ? (refundKobo ?? 0) : tx.totalKobo;
     if (refundAmount <= 0) throw new Error("Refund amount must be positive");
 
-    // Refund cap: remainingRefundable = totalKobo − already_refunded − already_settled
+    // Refund cap: remainingRefundable = totalKobo − feeKobo − already_refunded − already_settled
     const cap = await remainingRefundable(ctx, tx._id, tx.totalKobo);
     if (refundAmount > cap) {
       throw new Error(`Refund amount ${refundAmount} exceeds remaining refundable ${cap} (already refunded: ${tx.totalKobo - cap})`);
+    }
+
+    // Idempotency: if this key already produced a refund, return the prior result
+    if (idempotencyKey) {
+      const existingRefund = await ctx.db
+        .query("refunds")
+        .withIndex("by_transaction", (q) => q.eq("transactionId", tx._id as any))
+        .filter((q) => q.eq(q.field("idempotencyKey"), idempotencyKey))
+        .first();
+      if (existingRefund) {
+        return { decision, refundId: existingRefund._id, status: existingRefund.status, alreadyProcessed: true };
+      }
     }
     // Privileged financial approval: step-up MFA gate (Decision F). Dev:
     // audit-logged bypass. Production without MFA: denied.
@@ -214,6 +234,7 @@ export const resolveDispute = mutation({
       amountKobo: refundAmount,
       reason: note ?? "Admin decision",
       status: result.status,
+      idempotencyKey: idempotencyKey ?? undefined,
       createdAt: now(),
       completedAt: result.status === "PAID" ? now() : undefined,
     });

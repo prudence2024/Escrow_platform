@@ -236,6 +236,7 @@ export const create = mutation({
     if (!CATEGORIES.includes(args.category as any)) throw new Error("Invalid category");
     if (args.amountKobo > LIMITS.maxTransactionKobo) throw new Error("Amount exceeds limit");
     if (args.amountKobo < LIMITS.minTransactionKobo) throw new Error("Amount below minimum");
+    if (args.deliveryFeeKobo < 0) throw new Error("Delivery fee must be non-negative");
     const totalKobo = args.amountKobo + args.deliveryFeeKobo;
     const { feeKobo, chargedTo } = feeFor(args.amountKobo);
     if ((args.mediaUrls?.length ?? 0) > LIMITS.maxMediaPerTransaction) {
@@ -392,6 +393,29 @@ export const cancel = mutation({
     });
     await audit(ctx, { entityType: "transaction", entityId: tx._id, actorId: user._id, action: "CANCEL", reason, to: STATUSES.CANCELLED });
     return { status: STATUSES.CANCELLED };
+  },
+});
+
+/** Expire overdue transactions (admin/ops or cron). */
+export const expireOverdue = mutation({
+  args: { publicId: v.string() },
+  handler: async (ctx, { publicId }) => {
+    const user = await requireStaff(ctx);
+    const tx = await getTxByPublicIdOrSlug(ctx as any, publicId);
+    if (!tx) throw new Error("Transaction not found");
+    const EXPIRABLE = new Set([STATUSES.PENDING_BUYER_ACCEPTANCE, STATUSES.AWAITING_PAYMENT]);
+    if (!EXPIRABLE.has(tx.status as any)) {
+      throw new Error(`Transaction in status ${tx.status} cannot be expired`);
+    }
+    if (isTerminal(tx.status as any)) throw new Error("Transaction already finalized");
+    await performTransition(ctx, {
+      transactionDoc: tx,
+      to: STATUSES.EXPIRED,
+      actorId: user._id,
+      reason: "Transaction expired",
+    });
+    await audit(ctx, { entityType: "transaction", entityId: tx._id, actorId: user._id, action: "EXPIRE", reason: "Overdue", to: STATUSES.EXPIRED });
+    return { status: STATUSES.EXPIRED };
   },
 });
 

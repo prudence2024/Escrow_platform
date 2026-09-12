@@ -109,16 +109,25 @@ export async function notify(
 
 // ---- ledger (double-entry, append-only) ----
 
+/** Account type map — used by ensureLedgerAccount to seed correct types. */
+const ACCOUNT_TYPES: Record<string, string> = {
+  "1000": "ASSET",     // Custody asset
+  "2000": "LIABILITY", // Buyer payable
+  "4000": "REVENUE",   // Fee revenue
+};
+
 async function ensureLedgerAccount(ctx: MutationCtx, code: string, type: string) {
   const existing = await ctx.db
     .query("ledger_accounts")
     .withIndex("by_code", (q) => q.eq("code", code))
     .first();
   if (existing) return existing._id;
+  // Use the map type if known, otherwise fall back to the provided type
+  const accountType = ACCOUNT_TYPES[code] ?? type;
   return ctx.db.insert("ledger_accounts", {
     code,
     name: code,
-    type,
+    type: accountType,
     currency: "NGN",
   });
 }
@@ -158,6 +167,23 @@ export async function postDoubleEntry(
     memo: `${args.memo} [credit]`,
     createdAt: now(),
   });
+}
+
+/**
+ * Assert that a financial record is not being destructively overwritten.
+ * Use this before patching finalized financial records (payments, settlements, refunds).
+ */
+export function assertFinancialImmutability(
+  status: string | undefined,
+  newStatus: string,
+  operation: string,
+) {
+  const FINAL = new Set(["PAID", "SETTLED", "REFUNDED", "FAILED"]);
+  if (status && FINAL.has(status) && status !== newStatus) {
+    throw new Error(
+      `Cannot overwrite finalized ${operation} record from ${status} to ${newStatus} (append-only)`,
+    );
+  }
 }
 
 // ---- status transition helper for transactions ----

@@ -130,3 +130,43 @@ export function feeFor(
   const feeKobo = Math.min(total, FEE_CONFIG.capKobo);
   return { feeKobo, chargedTo: FEE_CONFIG.chargedTo };
 }
+
+/**
+ * Fee-aware financial breakdown for a transaction.
+ *
+ * Policy (DealSure):
+ *  - Platform fee is non-refundable.
+ *  - Seller settlement = totalKobo − feeKobo.
+ *  - Refund cap = totalKobo − feeKobo − Σ(paid refunds) − Σ(paid settlements).
+ *  - Partial refunds are proportional to the refundable amount.
+ *  - Rounding: deterministic truncation (floor). Any residual stays with platform.
+ *
+ * All values in integer minor units (kobo).
+ */
+export function financialBreakdown(totalKobo: number, deliveryFeeKobo: number) {
+  const { feeKobo } = feeFor(totalKobo);
+  const sellerSettlementKobo = Math.max(0, totalKobo - feeKobo);
+  return {
+    totalKobo,
+    feeKobo,
+    deliveryFeeKobo,
+    sellerSettlementKobo,
+    /** Maximum refundable amount (before any refunds/settlements) */
+    maxRefundableKobo: sellerSettlementKobo,
+  };
+}
+
+/**
+ * Typed financial error codes. Used by mutations to return structured errors
+ * that the Hono API handler maps to appropriate HTTP status codes.
+ */
+export const FINANCIAL_ERRORS = {
+  REFUND_EXCEEDS_CAP: "FINANCIAL_REFUND_EXCEEDS_CAP",
+  PAYMENT_NOT_INTENT: "FINANCIAL_PAYMENT_NOT_INTENT",
+  INVALID_STATE_TRANSITION: "FINANCIAL_INVALID_STATE_TRANSITION",
+  TRANSACTION_NOT_FOUND: "FINANCIAL_TRANSACTION_NOT_FOUND",
+  DISPUTE_NOT_OPEN: "FINANCIAL_DISPUTE_NOT_OPEN",
+  DELIVERY_FEE_NEGATIVE: "FINANCIAL_DELIVERY_FEE_NEGATIVE",
+  AMOUNT_BELOW_MINIMUM: "FINANCIAL_AMOUNT_BELOW_MINIMUM",
+  AMOUNT_EXCEEDS_LIMIT: "FINANCIAL_AMOUNT_EXCEEDS_LIMIT",
+} as const;

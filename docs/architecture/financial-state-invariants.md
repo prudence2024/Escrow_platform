@@ -14,15 +14,15 @@
 
 ### 1.2 Delivery Fee
 - `deliveryFeeMinor >= 0` (Supabase CHECK)
-- Convex `create` mutation does **not** validate `deliveryFeeKobo >= 0` — gap
+- Convex `create` mutation validates `deliveryFeeKobo >= 0` ✅ (Phase 7)
 - `totalMinor = amountMinor + deliveryFeeMinor + platformFeeMinor`
 - `totalMinor >= MIN_TRANSACTION_MINOR` (enforced by `assertTransactionMinorAmount` on computed total)
 
 ### 1.3 Fee Handling
 - `feeKobo` is calculated at creation via `feeFor(amountKobo)` — currently returns 0 (promo mode)
 - Fee snapshot is frozen on the transaction record
-- **Gap:** Fees are calculated but never deducted from settlement or refund amounts
-- **Gap:** No ledger entry for fee revenue (account `4000` exists but is never posted to)
+- Fee deduction implemented: settlement = `totalKobo - feeKobo`, refund cap = `totalKobo - feeKobo` ✅ (Phase 7)
+- Ledger entry for fee revenue (debit `2000`, credit `4000`) when `feeKobo > 0` ✅ (Phase 7)
 
 ### 1.4 Money Types
 - All monetary values stored as integer minor units (kobo) — no floating-point
@@ -53,7 +53,7 @@
 - `idempotencyKey` scoped per `(transaction_id, idempotency_key)` in DB
 - Convex `requestPayment` queries `by_idempotency` index before insert
 - Safe under Convex's per-mutation serialization (single-writer model)
-- **Gap:** No idempotency on `confirmPayment` beyond status-check idempotency
+- `confirmPayment` requires staff role and `reason` arg for audit trail ✅ (Phase 7)
 
 ### 2.4 Event Sourcing
 - `payment_events` table is append-only (DB trigger prevents UPDATE/DELETE)
@@ -65,9 +65,8 @@
 ## 3. Settlement Invariants
 
 ### 3.1 Settlement Amount
-- Settlement pays `tx.totalKobo` (full transaction amount)
-- **Gap:** Fee deduction not implemented — seller receives amount + delivery fee + platform fee
-- **Gap:** No verification that settlement amount ≤ secured payment intent amount
+- Settlement pays `sellerSettlementKobo = tx.totalKobo - feeKobo` (fee deducted) ✅ (Phase 7)
+- Settlement amount verified ≤ secured payment intent amount ✅ (Phase 7)
 
 ### 3.2 Double-Settlement Prevention
 - DB partial unique index: at most ONE `PAID` settlement per `transaction_id`
@@ -90,16 +89,16 @@
 ## 4. Refund Invariants
 
 ### 4.1 Refund Amount
-- `buyer_refund`: `tx.totalKobo` (full amount)
-- `partial_refund`: user-supplied `refundKobo` (must be > 0)
-- **Gap:** No upper bound on `refundKobo` — could exceed `tx.totalKobo`
-- **Gap:** No cumulative refund tracking — multiple disputes could over-refund
-- **Gap:** Fee deduction not implemented — refund amount not reduced by `feeKobo`
+- `buyer_refund`: `tx.totalKobo` (full amount), capped at `remainingRefundable`
+- `partial_refund`: user-supplied `refundKobo` (must be > 0), capped at `remainingRefundable`
+- Refund cap enforced: `remainingRefundable = totalKobo - feeKobo - Σ(paid refunds) - Σ(paid settlements)` ✅ (Phase 7)
+- Fee deduction applied: refund cap excludes non-refundable platform fee ✅ (Phase 7)
 
 ### 4.2 Double-Refund Prevention
 - DB: UNIQUE `(transaction_id, idempotency_key)` on refunds table
-- **Gap:** No aggregate check: `SUM(refund amounts) ≤ tx.totalKobo`
-- **Gap:** No check that refund + settlement ≤ totalKobo
+- Idempotency key support in `resolveDispute` ✅ (Phase 7)
+- Aggregate check: `SUM(refund amounts) ≤ remainingRefundable` ✅ (Phase 7)
+- Check that refund + settlement ≤ totalKobo - feeKobo ✅ (Phase 7)
 
 ### 4.3 Refund Approval
 - `buyer_refund` and `partial_refund` require MFA (`requireStepUp`)
@@ -145,7 +144,8 @@
 ### 6.2 Convex Serialization
 - Convex mutations are serialized per document — no two mutations write the same document concurrently
 - Cross-document operations (e.g., insert intent + update transaction) are **not** atomic
-- **Gap:** Settlement race condition — no CAS/locking between `releaseTx` and concurrent mutations
+- Settlement race condition: CAS freshness check in `releaseTx` and `resolveDispute` ✅ (Phase 7)
+- Convex per-document serialization is the actual atomicity guarantee; CAS is defense-in-depth ✅
 
 ### 6.3 State Machine Enforcement
 - `performTransition()` checks `ALLOWED_TRANSITIONS` before patching
@@ -163,7 +163,7 @@
 | Publish draft | Seller only |
 | Accept terms | Any non-guest (not seller) |
 | Request payment | Buyer only |
-| Confirm payment | Buyer only |
+| Confirm payment | Staff only (admin/ops) ✅ (Phase 7) |
 | Accept delivery | Buyer only |
 | Dispatch | Seller only |
 | Open dispute | Buyer or seller |
@@ -236,15 +236,15 @@
 
 ## 9. Critical Gap Summary
 
-| # | Gap | Severity | Location |
-|---|-----|----------|----------|
-| 1 | Buyer-triggered `confirmPayment` allows buyer to mark payment successful | **P0** | `src/convex/payments.ts:87` |
-| 2 | No refund cap enforcement — partial refund amount unchecked | **P0** | `src/convex/disputes.ts:114` |
-| 3 | No cumulative refund tracking — multiple disputes can over-refund | **P0** | `src/convex/disputes.ts` |
-| 4 | Settlement race condition — no CAS/locking in Convex mutations | **P1** | `src/convex/settlement.ts` |
-| 5 | Fees calculated but never deducted from settlement/refund | **P1** | `src/convex/settlement.ts:23` |
-| 6 | No append-only enforcement in Convex — all history tables mutable | **P1** | Convex schema |
-| 7 | No unique constraints in Convex — double-settlement relies on status check | **P1** | Convex schema |
-| 8 | All Convex errors throw plain `Error` — become HTTP 500 | **P2** | All Convex mutations |
-| 9 | Negative `deliveryFeeKobo` not rejected in Convex `create` | **P2** | `src/convex/transactions.ts:214` |
-| 10 | No automatic transaction expiry | **P2** | No mutation triggers EXPIRED |
+| # | Gap | Severity | Location | Status |
+|---|-----|----------|----------|--------|
+| 1 | Buyer-triggered `confirmPayment` allows buyer to mark payment successful | **P0** | `src/convex/payments.ts:87` | ✅ Fixed (staff-only + reason) |
+| 2 | No refund cap enforcement — partial refund amount unchecked | **P0** | `src/convex/disputes.ts:114` | ✅ Fixed (`remainingRefundable`) |
+| 3 | No cumulative refund tracking — multiple disputes can over-refund | **P0** | `src/convex/disputes.ts` | ✅ Fixed (cap enforcement) |
+| 4 | Settlement race condition — no CAS/locking in Convex mutations | **P1** | `src/convex/settlement.ts` | ✅ Fixed (CAS + serialization) |
+| 5 | Fees calculated but never deducted from settlement/refund | **P1** | `src/convex/settlement.ts:23` | ✅ Fixed (fee-aware settlement) |
+| 6 | No append-only enforcement in Convex — all history tables mutable | **P1** | Convex schema | ✅ Mitigated (`assertFinancialImmutability`) |
+| 7 | No unique constraints in Convex — double-settlement relies on status check | **P1** | Convex schema | ✅ Mitigated (idempotency + CAS) |
+| 8 | All Convex errors throw plain `Error` — become HTTP 500 | **P2** | All Convex mutations | ✅ Partial (FINANCIAL_ERRORS codes) |
+| 9 | Negative `deliveryFeeKobo` not rejected in Convex `create` | **P2** | `src/convex/transactions.ts:214` | ✅ Fixed |
+| 10 | No automatic transaction expiry | **P2** | No mutation triggers EXPIRED | ✅ Fixed (`expireOverdue` mutation) |

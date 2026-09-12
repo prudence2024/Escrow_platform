@@ -1,6 +1,6 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { STATUSES } from "./config";
+import { STATUSES, feeFor } from "./config";
 import { performTransition, audit, notify, postDoubleEntry, genPublicId, now } from "./lib";
 import { requireNonGuestUser } from "./authz";
 import { getProvider } from "./payments/providers";
@@ -25,6 +25,8 @@ export async function releaseTx(ctx: MutationCtx, args: { publicId: string; acto
   if (!tx) throw new Error("Transaction not found");
   if (tx.disputeBlocked) throw new Error("Transaction is settlement-blocked (frozen)");
 
+  // Idempotent: if already settled, return success without re-processing.
+  // Convex per-document serialization prevents concurrent settlement of the same tx.
   if (tx.status === STATUSES.SETTLED) {
     return { status: STATUSES.SETTLED, alreadyProcessed: true };
   }
@@ -60,6 +62,10 @@ export async function releaseTx(ctx: MutationCtx, args: { publicId: string; acto
     .first();
   if (!securedIntent) throw new Error("Payment has not been verified");
 
+  // Fee-aware settlement: seller receives totalKobo − feeKobo
+  const { feeKobo } = feeFor(tx.totalKobo);
+  const sellerSettlementKobo = Math.max(0, tx.totalKobo - feeKobo);
+
   if (tx.status === STATUSES.ACCEPTED) {
     await performTransition(ctx, { transactionDoc: tx, to: STATUSES.RELEASE_PENDING, actorId: args.actorId, reason: "Release conditions met" });
   }
@@ -75,7 +81,7 @@ export async function releaseTx(ctx: MutationCtx, args: { publicId: string; acto
     reference: refId,
     recipientAccountNumber: bank?.accountNumber ?? "0000000000",
     recipientBankCode: bank?.bankCode ?? "",
-    amountKobo: tx.totalKobo,
+    amountKobo: sellerSettlementKobo,
     currency: tx.currency,
   });
   const settlementId = await ctx.db.insert("settlements", {
@@ -83,7 +89,7 @@ export async function releaseTx(ctx: MutationCtx, args: { publicId: string; acto
     recipientId: tx.sellerId,
     provider: securedIntent.provider,
     providerRef: settlementResult.providerRef,
-    amountKobo: tx.totalKobo,
+    amountKobo: sellerSettlementKobo,
     status: settlementResult.status,
     createdAt: now(),
     completedAt: settlementResult.status === "PAID" ? now() : undefined,
@@ -95,9 +101,20 @@ export async function releaseTx(ctx: MutationCtx, args: { publicId: string; acto
       refId: genPublicId("led"),
       transactionId: tx._id,
       memo: "Settlement released to seller",
-      debit: { code: "2000", amountKobo: tx.totalKobo },
-      credit: { code: "1000", amountKobo: tx.totalKobo },
+      debit: { code: "2000", amountKobo: sellerSettlementKobo },
+      credit: { code: "1000", amountKobo: sellerSettlementKobo },
     });
+
+    // Record fee revenue if non-zero
+    if (feeKobo > 0) {
+      await postDoubleEntry(ctx, {
+        refId: genPublicId("led"),
+        transactionId: tx._id,
+        memo: "Platform fee revenue",
+        debit: { code: "2000", amountKobo: feeKobo },
+        credit: { code: "4000", amountKobo: feeKobo },
+      });
+    }
     await performTransition(ctx, {
       transactionDoc: { ...tx, status: STATUSES.RELEASE_PENDING },
       to: STATUSES.SETTLED,

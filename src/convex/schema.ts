@@ -315,6 +315,7 @@ const schema = defineSchema({
     amountKobo: v.number(),
     reason: v.optional(v.string()),
     status: v.optional(v.string()), // PENDING | PAID | FAILED
+    idempotencyKey: v.optional(v.string()),
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
   })

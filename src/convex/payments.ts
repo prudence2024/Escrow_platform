@@ -89,8 +89,12 @@ export const requestPayment = mutation({
  * Sandbox: staff (admin/ops) can trigger this to simulate provider callback.
  */
 export const confirmPayment = mutation({
-  args: { reference: v.string(), idempotencyKey: v.string() },
-  handler: async (ctx, { reference, idempotencyKey }) => {
+  args: {
+    reference: v.string(),
+    idempotencyKey: v.string(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, { reference, idempotencyKey, reason }) => {
     // Staff-only: buyer cannot confirm their own payment
     const staff = await requireStaff(ctx);
     const tx = await getTxByReference(ctx, reference);
@@ -162,7 +166,7 @@ export const confirmPayment = mutation({
       body: `Payment for "${tx.title}" has been verified. You can now deliver.`,
       transactionId: tx._id,
     });
-    await audit(ctx, { entityType: "payment_intent", entityId: intent._id, actorId: staff._id, action: "PAYMENT_VERIFIED", to: "SECURED", meta: JSON.stringify({ amountKobo: tx.totalKobo, provider: intent.provider }) });
+    await audit(ctx, { entityType: "payment_intent", entityId: intent._id, actorId: staff._id, action: "PAYMENT_VERIFIED", to: "SECURED", meta: JSON.stringify({ amountKobo: tx.totalKobo, provider: intent.provider, source: "staff_manual_override", reason: reason ?? "Sandbox payment confirmation" }) });
     return { status: STATUSES.PAYMENT_SECURED, wording: SECURED_WORDING.primary, alreadyProcessed: false };
   },
 });
