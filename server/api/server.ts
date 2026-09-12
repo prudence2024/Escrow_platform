@@ -9,10 +9,11 @@
  *   partial schema there is fatal (run `npm run migrate` explicitly).
  * - Serves the Hono app via @hono/node-server with graceful shutdown.
  *
- * Auth wiring: DenyAllAuth until a verified Convex-session adapter exists
- * (see server/auth/apiAuth.ts). Protected data routes therefore answer 401
- * in real deployments; health/readiness and the slug-capability invite
- * preview remain available by design.
+ * Auth wiring: DenyAllAuth by default (API_AUTH_MODE=deny, the default
+ * everywhere). API_AUTH_MODE=convex selects the verified Convex JWT adapter
+ * with explicit server-side issuer/audience configuration; discovery or JWKS
+ * failures are startup-fatal. Protected data routes therefore answer 401
+ * unless convex mode is deliberately configured AND verified at startup.
  */
 import { serve } from "@hono/node-server";
 import type { Client } from "@libsql/client";
@@ -23,6 +24,10 @@ import { appliedMigrations, loadMigrations, runMigrations } from "../db/migrate.
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DenyAllAuth } from "../auth/apiAuth.js";
+import type { ApiAuth } from "../auth/apiAuth.js";
+import { resolveApiAuthMode } from "../auth/authModes.js";
+import { createConvexAuth } from "../auth/convexAuthMode.js";
+import { tursoRoleLoader } from "../auth/roleLoader.js";
 import { createConsoleLogger } from "../observability/logger.js";
 import { createApp } from "./app.js";
 import { TursoTransactionRepository } from "../repositories/TursoTransactionRepository.js";
@@ -71,8 +76,19 @@ async function main(): Promise<void> {
 
   const txRepo = new TursoTransactionRepository(client);
   const userRepo = new TursoUserRepository(client);
+  // Auth mode: deny by default (dev included). convex mode requires explicit
+  // CONVEX_ISSUER_URL (+ optional CONVEX_AUDIENCE); discovery/JWKS failures
+  // are startup-fatal, never degraded. Production stays deny unless a later
+  // phase explicitly authorizes convex wiring after live verification.
+  const authMode = resolveApiAuthMode(process.env);
+  let auth: ApiAuth = new DenyAllAuth();
+  if (authMode === "convex") {
+    logger.log("info", "convex auth mode selected", {});
+    auth = await createConvexAuth(process.env, tursoRoleLoader(client));
+    logger.log("info", "convex auth verifier ready", {});
+  }
   const app = createApp({
-    auth: new DenyAllAuth(),
+    auth,
     txService: new TransactionQueryService(txRepo, userRepo),
     userService: new UserQueryService(userRepo),
     checkReadiness: async () => {
