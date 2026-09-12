@@ -112,8 +112,10 @@ export async function buildTursoSnapshot(client: Client, exportedAt: number = Da
       args: [txId],
     });
     const itemRow = items.rows[0] as Row;
+    // Latest recorded delivery row (deliveries carry event timestamps, not
+    // their own created_at; rowid order = insertion recency, deterministic).
     const delivery = await client.execute({
-      sql: "SELECT status FROM deliveries WHERE transaction_id = ? ORDER BY created_at DESC LIMIT 1",
+      sql: "SELECT status FROM deliveries WHERE transaction_id = ? ORDER BY rowid DESC LIMIT 1",
       args: [txId],
     });
     const dispute = await client.execute({
@@ -210,6 +212,15 @@ export function normalizeConvexSnapshot(artifact: ConvexExportArtifact): ParityS
     list.push(item);
     itemsByTx.set(String(item["transactionId"]), list);
   }
+  const itemQuantityOf = (items: Array<Record<string, unknown>>): number =>
+    items.reduce(
+      (sum, item) =>
+        sum +
+        (typeof item["quantity"] === "number" && Number.isInteger(item["quantity"]) && item["quantity"] > 0
+          ? item["quantity"]
+          : 1),
+      0,
+    );
   const latestByTx = (collection: string, txField: string): Map<string, Record<string, unknown>> => {
     const out = new Map<string, Record<string, unknown>>();
     for (const row of artifact.collections[collection] ?? []) {
@@ -252,7 +263,7 @@ export function normalizeConvexSnapshot(artifact: ConvexExportArtifact): ParityS
       currency: typeof t["currency"] === "string" ? t["currency"] : "NGN",
       origin: "SHARE_LINK",
       itemCount: items.length,
-      itemQuantityTotal: items.length,
+      itemQuantityTotal: itemQuantityOf(items),
       deliveryStatus: pick(deliveries, "status"),
       disputeStatus: pick(disputes, "status"),
       paymentStatus: pick(payments, "status"),

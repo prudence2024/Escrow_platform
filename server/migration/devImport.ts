@@ -87,17 +87,71 @@ export async function importArtifact(
     sql: string,
     args: Array<string | number | null>,
   ): void => {
+    // Structural guard: this driver's silent NULL-fill on missing bindings
+    // would turn an arg-count bug into silent corruption masked by OR IGNORE.
+    // Fail loudly at plan time instead (all modes, including dry-run).
+    const placeholders = (sql.match(/\?/g) ?? []).length;
+    if (placeholders !== args.length) {
+      throw new ImportRefusedError(
+        `Importer bug: ${entity} binds ${args.length} arg(s) for ${placeholders} placeholder(s)`,
+      );
+    }
     plans.push({ entity, sql, args });
   };
+
+  // Conflict pre-flight (§27): same stable PK with different domain content
+  // must FAIL, never silently skip or overwrite immutable history.
+  // Checkable tables are a closed literal union (no dynamic table names).
+  type CheckableTable =
+    | "profiles" | "transactions" | "payment_intents"
+    | "disputes" | "settlements" | "refunds";
+  interface ConflictCheck {
+    entity: string;
+    table: CheckableTable;
+    id: string;
+    fields: Record<string, string | number | null>;
+  }
+  const checks: ConflictCheck[] = [];
+  const watch = (
+    entity: string,
+    table: CheckableTable,
+    id: string,
+    fields: Record<string, string | number | null>,
+  ): void => {
+    checks.push({ entity, table, id, fields });
+  };
+
+  async function assertNoConflicts(): Promise<void> {
+    for (const check of checks) {
+      const rs = await client.execute({
+        sql: `SELECT * FROM ${check.table} WHERE id = ?`,
+        args: [check.id],
+      });
+      const existing = rs.rows[0] as Record<string, unknown> | undefined;
+      if (existing === undefined) continue;
+      for (const [field, expected] of Object.entries(check.fields)) {
+        const actual = existing[field] === null || existing[field] === undefined ? null : existing[field];
+        const want = expected === null || expected === undefined ? null : expected;
+        if (String(actual) !== String(want)) {
+          throw new ImportRefusedError(
+            `${check.entity} ${check.id}: conflicting ${field} (database has ${String(actual)}, artifact has ${String(want)}) — refusing to rewrite history`,
+          );
+        }
+      }
+    }
+  }
 
   for (const u of collections["users"] ?? []) {
     requireFields("users", u, ["_id"]);
     const id = String(u["_id"]);
+    const email = typeof u["email"] === "string" ? u["email"] : null;
+    const name = typeof u["name"] === "string" ? u["name"] : null;
+    watch("profiles", "profiles", id, { email, display_name: name });
     queue("profiles", "INSERT OR IGNORE INTO profiles (id, email, display_name, full_name, onboarded, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)", [
       id,
-      typeof u["email"] === "string" ? u["email"] : null,
-      typeof u["name"] === "string" ? u["name"] : null,
-      typeof u["name"] === "string" ? u["name"] : null,
+      email,
+      name,
+      name,
       opts.nowMs ?? Date.now(),
       opts.nowMs ?? Date.now(),
     ]);
@@ -116,10 +170,11 @@ export async function importArtifact(
     requireFields("transactions", t, ["_id", "publicId", "slug", "sellerId", "status"]);
     const amount = typeof t["amountKobo"] === "number" ? t["amountKobo"] : 0;
     const fee = typeof t["deliveryFeeKobo"] === "number" ? t["deliveryFeeKobo"] : 0;
+    const platformFee = typeof t["feeKobo"] === "number" ? t["feeKobo"] : 0;
     queue("transactions", `INSERT OR IGNORE INTO transactions
       (id, public_reference, invite_slug, transaction_origin, seller_id, buyer_id, title, description, category,
        amount_minor, delivery_fee_minor, platform_fee_minor, total_minor, status, created_at, updated_at)
-     VALUES (?, ?, ?, 'SHARE_LINK', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`, [
+     VALUES (?, ?, ?, 'SHARE_LINK', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       String(t["_id"]),
       String(t["publicId"]),
       String(t["slug"]),
@@ -130,6 +185,7 @@ export async function importArtifact(
       typeof t["category"] === "string" ? t["category"] : "Other",
       amount,
       fee,
+      platformFee,
       typeof t["totalKobo"] === "number" ? t["totalKobo"] : amount + fee,
       String(t["status"]),
       opts.nowMs ?? Date.now(),
@@ -149,10 +205,15 @@ export async function importArtifact(
 
   for (const item of collections["transaction_items"] ?? []) {
     requireFields("transaction_items", item, ["_id", "transactionId", "name"]);
-    queue("transaction_items", "INSERT OR IGNORE INTO transaction_items (id, transaction_id, name, quantity, unit_amount_minor, note) VALUES (?, ?, ?, 1, 0, ?)", [
+    const quantity =
+      typeof item["quantity"] === "number" && Number.isInteger(item["quantity"]) && item["quantity"] > 0
+        ? item["quantity"]
+        : 1;
+    queue("transaction_items", "INSERT OR IGNORE INTO transaction_items (id, transaction_id, name, quantity, unit_amount_minor, note) VALUES (?, ?, ?, ?, 0, ?)", [
       String(item["_id"]),
       String(item["transactionId"]),
       String(item["name"]),
+      quantity,
       typeof item["note"] === "string" ? item["note"] : null,
     ]);
   }
@@ -169,7 +230,7 @@ export async function importArtifact(
       typeof pi["amountKobo"] === "number" ? pi["amountKobo"] : 0,
       typeof pi["status"] === "string" ? pi["status"] : "PENDING",
       typeof pi["idempotencyKey"] === "string" ? pi["idempotencyKey"] : `imp-${String(pi["_id"])}`,
-      opts.nowMs ?? Date.now(),
+      typeof pi["createdAt"] === "number" ? pi["createdAt"] : (opts.nowMs ?? Date.now()),
     ]);
   }
 
@@ -215,6 +276,55 @@ export async function importArtifact(
     ]);
   }
 
+  for (const e of collections["dispute_evidence"] ?? []) {
+    requireFields("dispute_evidence", e, ["_id", "disputeId", "uploaderId"]);
+    queue("dispute_evidence", "INSERT OR IGNORE INTO dispute_evidence (id, dispute_id, uploader_id, storage_key, mime_type, size_bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", [
+      String(e["_id"]),
+      String(e["disputeId"]),
+      String(e["uploaderId"]),
+      typeof e["storageKey"] === "string" ? e["storageKey"] : null,
+      typeof e["mimeType"] === "string" ? e["mimeType"] : null,
+      typeof e["sizeBytes"] === "number" ? e["sizeBytes"] : null,
+      opts.nowMs ?? Date.now(),
+    ]);
+  }
+
+  for (const t of collections["terms_versions"] ?? []) {
+    requireFields("terms_versions", t, ["_id", "version", "content"]);
+    queue("terms_versions", "INSERT OR IGNORE INTO terms_versions (id, version, content, effective_at) VALUES (?, ?, ?, ?)", [
+      String(t["_id"]),
+      typeof t["version"] === "number" ? t["version"] : 0,
+      String(t["content"]),
+      typeof t["effectiveAt"] === "number" ? t["effectiveAt"] : (opts.nowMs ?? Date.now()),
+    ]);
+  }
+
+  for (const a of collections["terms_acceptances"] ?? []) {
+    requireFields("terms_acceptances", a, ["_id", "userId", "termsVersionId"]);
+    queue("terms_acceptances", "INSERT OR IGNORE INTO terms_acceptances (id, profile_id, terms_version_id, transaction_id, accepted_at) VALUES (?, ?, ?, ?, ?)", [
+      String(a["_id"]),
+      String(a["userId"]),
+      String(a["termsVersionId"]),
+      a["transactionId"] == null ? null : String(a["transactionId"]),
+      opts.nowMs ?? Date.now(),
+    ]);
+  }
+
+  // Known but out-of-scope for the development importer: reported, never silent.
+  for (const [collection, reason] of [
+    ["profiles", "identity display data comes from users rows in this importer"],
+    ["kyc_profiles", "KYC migration is a later-phase concern"],
+    ["bank_accounts", "payout destinations migrate with provider tokenization later"],
+    ["risk_flags", "operational flags are recreated, not migrated, in dev"],
+    ["admin_notes", "staff notes are recreated, not migrated, in dev"],
+  ] as Array<[string, string]>) {
+    const rows = collections[collection] ?? [];
+    if (rows.length > 0) {
+      bump(counts.skippedByPolicy, collection, rows.length);
+      counts.warnings.push(`${rows.length} ${collection} row(s) skipped: ${reason}`);
+    }
+  }
+
   for (const s of collections["settlements"] ?? []) {
     requireFields("settlements", s, ["_id", "transactionId"]);
     queue("settlements", `INSERT OR IGNORE INTO settlements
@@ -231,14 +341,14 @@ export async function importArtifact(
   }
 
   for (const r of collections["refunds"] ?? []) {
-    requireFields("refunds", r, ["_id", "transactionId"]);
+    requireFields("refunds", r, ["_id", "transactionId", "requestedBy"]);
     queue("refunds", `INSERT OR IGNORE INTO refunds
       (id, transaction_id, amount_minor, requested_by, status, provider, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`, [
       String(r["_id"]),
       String(r["transactionId"]),
-      typeof r["requestedBy"] === "string" ? r["requestedBy"] : "",
       typeof r["amountKobo"] === "number" ? r["amountKobo"] : 0,
+      typeof r["requestedBy"] === "string" ? r["requestedBy"] : "",
       typeof r["status"] === "string" ? r["status"] : "PENDING",
       typeof r["provider"] === "string" ? r["provider"] : "mock",
       opts.nowMs ?? Date.now(),
@@ -268,6 +378,10 @@ export async function importArtifact(
       opts.nowMs ?? Date.now(),
     ]);
   }
+
+  // Conflict pre-flight runs in BOTH modes (read-only): dry-run surfaces
+  // would-be conflicts before anything writes.
+  await assertNoConflicts();
 
   if (opts.dryRun) {
     for (const plan of plans) bump(counts.inserted, `${plan.entity} (planned)`, 1);

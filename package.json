@@ -14,6 +14,8 @@
     "migrate": "tsx server/db/migrate-cli.ts",
     "seed:dev": "tsx server/db/seed/dev.ts",
     "shadow:compare": "tsx server/migration/shadow-cli.ts",
+    "parity:rehearse": "tsx server/migration/rehearse-cli.ts",
+    "turso:smoke": "tsx server/db/smoke.ts",
     "dev:api": "tsx server/api/server.ts"
   },
   "dependencies": {
