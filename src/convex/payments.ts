@@ -1,8 +1,8 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { STATUSES, SECURED_WORDING, PROVIDER } from "./config";
-import { performTransition, audit, notify, postDoubleEntry, genPublicId, now } from "./lib";
-import { requireNonGuestUser, requireStaff } from "./authz";
+import { requireStaff, performTransition, audit, notify, postDoubleEntry, genPublicId, now } from "./lib";
+import { requireNonGuestUser } from "./authz";
 import { getProvider } from "./payments/providers";
 import type { MutationCtx } from "./_generated/server";
 
@@ -94,8 +94,10 @@ export const confirmPayment = mutation({
     idempotencyKey: v.string(),
     reason: v.optional(v.string()),
   },
-  handler: async (ctx, { reference, idempotencyKey, reason }) => {
+  handler: async (ctx, { reference, reason }) => {
     // Staff-only: buyer cannot confirm their own payment
+    // Note: idempotencyKey remains a required arg for API stability; confirmation
+    // itself is idempotent via PAYMENT_SECURED/SECURED status checks below.
     const staff = await requireStaff(ctx);
     const tx = await getTxByReference(ctx, reference);
     if (!tx) throw new Error("Transaction not found");

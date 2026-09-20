@@ -13,7 +13,6 @@ import type { TransactionDraftService } from "../../services/TransactionDraftSer
 import { DraftServiceError } from "../../services/TransactionDraftService.js";
 import {
   badRequest,
-  notFound,
   unauthenticated,
   writeNotEnabled,
 } from "../errors.js";

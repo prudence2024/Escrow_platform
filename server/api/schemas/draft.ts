@@ -15,11 +15,6 @@
  *   seller terms: 0–2000 chars
  */
 import { z } from "zod";
-import {
-  MAX_TRANSACTION_MINOR,
-  MIN_TRANSACTION_MINOR,
-  KOBO_PER_NAIRA,
-} from "../../domain/money.js";
 
 export const CATEGORIES = [
   "Electronics",
@@ -65,16 +60,6 @@ export const createDraftSchema = z
   .strict();
 
 export type CreateDraftInput = z.infer<typeof createDraftSchema>;
-
-const allowedPatchFields = [
-  "title",
-  "description",
-  "category",
-  "items",
-  "deliveryFeeMinor",
-  "inspectionWindowDays",
-  "sellerTerms",
-] as const;
 
 export const editDraftSchema = z
   .object({

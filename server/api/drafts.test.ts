@@ -19,7 +19,6 @@ import { TursoUserRepository } from "../repositories/TursoUserRepository.js";
 import { TransactionQueryService } from "../services/TransactionQueryService.js";
 import { TransactionDraftService } from "../services/TransactionDraftService.js";
 import { UserQueryService } from "../services/UserQueryService.js";
-import type { AuthenticatedPrincipal } from "../../src/lib/auth/types.js";
 
 const AT = 1780000000000;
 const SELLER_ID = "seller-user";
@@ -79,13 +78,6 @@ function authApp(writeEnabled = true): Hono<ApiEnv> {
   auth.add("seller", SELLER);
   auth.add("stranger", STRANGER);
   auth.add("guest", GUEST);
-  return draftApp(auth, writeEnabled);
-}
-
-function bearerAuthApp(writeEnabled = true): Hono<ApiEnv> {
-  const auth = new TestPrincipalAuth();
-  auth.add("seller", SELLER);
-  auth.add("stranger", STRANGER);
   return draftApp(auth, writeEnabled);
 }
 
@@ -498,7 +490,7 @@ describe("POST /api/v1/transactions/drafts — idempotency", () => {
     const h = headers("seller", key);
     const r1 = await app.request("/api/v1/transactions/drafts", { method: "POST", headers: h, body });
     expect(r1.status).toBe(201);
-    const b1 = (await r1.json()) as Record<string, unknown>;
+    await r1.json();
 
     // Note: idempotency duplicate will hit UNIQUE constraint on idempotency_keys
     // The second request should either return the same result or 409

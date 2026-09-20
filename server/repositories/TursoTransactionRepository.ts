@@ -160,7 +160,7 @@ export class TursoTransactionRepository implements TransactionRepository {
     }));
   }
 
-  async create(input: Omit<Transaction, "id" | "createdAt" | "updatedAt">): Promise<Transaction> {
+  async create(): Promise<Transaction> {
     throw new Error(NOT_IMPLEMENTED);
   }
 

@@ -15,8 +15,6 @@ import {
   assertMinorAmount,
   assertTransactionMinorAmount,
   MAX_TRANSACTION_MINOR,
-  MIN_TRANSACTION_MINOR,
-  KOBO_PER_NAIRA,
 } from "../domain/money.js";
 import type { CreateDraftInput, EditDraftInput } from "../api/schemas/draft.js";
 import {
@@ -119,6 +117,7 @@ export class TransactionDraftService {
     idempotencyKey: string,
     requestId: string,
   ): Promise<CreateDraftResult> {
+    void requestId;
     // 1. Authorization: guest denied
     if (principal.isAnonymous) {
       throw new DraftServiceError("UNAUTHENTICATED", 401, "Guest users cannot create drafts");
@@ -263,6 +262,7 @@ export class TransactionDraftService {
     input: EditDraftInput,
     requestId: string,
   ): Promise<EditDraftResult> {
+    void requestId;
     // 1. Authorization: guest denied
     if (principal.isAnonymous) {
       throw new DraftServiceError("UNAUTHENTICATED", 401, "Guest users cannot edit drafts");
@@ -304,7 +304,7 @@ export class TransactionDraftService {
     // 5. Compute updated totals if items changed
     let amountMinor = existing.amountMinor;
     let totalMinor = existing.totalMinor;
-    let platformFeeMinor = existing.platformFeeMinor;
+    const platformFeeMinor = existing.platformFeeMinor;
 
     const itemsToUpdate = input.items?.map((i) => ({
       name: i.name,

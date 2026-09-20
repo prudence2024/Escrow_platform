@@ -17,6 +17,7 @@ import { describe, it, expect } from "vitest";
  */
 function feeFor(totalKobo: number): { feeKobo: number } {
   // Promo zero-fee mode (current production)
+  void totalKobo;
   return { feeKobo: 0 };
 }
 

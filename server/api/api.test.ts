@@ -16,7 +16,6 @@ import { createConsoleLogger } from "../observability/logger.js";
 import { TursoTransactionRepository } from "../repositories/TursoTransactionRepository.js";
 import { TursoUserRepository } from "../repositories/TursoUserRepository.js";
 import { TransactionQueryService } from "../services/TransactionQueryService.js";
-import { TransactionDraftService } from "../services/TransactionDraftService.js";
 import { UserQueryService } from "../services/UserQueryService.js";
 
 const AT = 1780000000000;
