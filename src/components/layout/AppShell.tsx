@@ -77,9 +77,9 @@ export function AppShell() {
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-border/70 bg-card/70 backdrop-blur px-4 py-6 sticky top-0 h-dvh">
         <Link to="/home" className="flex items-center gap-2 px-2 mb-8">
-          <img src={logo} alt="Deal Secure" className="size-9 rounded-xl" />
+          <img src={logo} alt="No Ojoro" className="size-9 rounded-xl" />
           <div>
-            <p className="font-semibold tracking-tight leading-none">Deal Security</p>
+            <p className="font-semibold tracking-tight leading-none">No Ojoro</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">protected payments</p>
           </div>
         </Link>
@@ -142,8 +142,8 @@ export function AppShell() {
         {/* Mobile top bar */}
         <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 bg-background/80 backdrop-blur border-b border-border/60">
           <Link to="/home" className="flex items-center gap-2">
-            <img src={logo} alt="Deal Secure" className="size-8 rounded-lg" />
-            <span className="font-semibold tracking-tight">Deal Secure</span>
+            <img src={logo} alt="No Ojoro" className="size-8 rounded-lg" />
+            <span className="font-semibold tracking-tight">No Ojoro</span>
           </Link>
           <div className="flex items-center gap-1.5">
             {!online && (
@@ -169,7 +169,7 @@ export function AppShell() {
             <div className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
               <Download className="size-4" />
             </div>
-            <div className="flex-1 text-sm font-medium">Add Deal Secure to your home screen</div>
+            <div className="flex-1 text-sm font-medium">Add No Ojoro to your home screen</div>
             <button
               className="rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-primary-foreground"
               onClick={async () => {

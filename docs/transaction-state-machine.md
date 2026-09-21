@@ -1,4 +1,6 @@
-# DealSure — Transaction State Machine
+# No Ojoro — Transaction State Machine
+
+> Former working name: DealSure.
 
 Statuses are defined as a typed const enum in `src/convex/transactions/state.ts`
 and all transitions are validated server-side against an explicit transition map.

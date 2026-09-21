@@ -1,14 +1,16 @@
-# Deal Secure — Protected Payments (PWA)
+# No Ojoro
 
-Deal Secure protects transactions in social commerce. A buyer pays through the
-platform, money is held with a payment partner, the seller delivers, and the
-seller is **only** paid after the buyer accepts the item (or the inspection
-period passes without dispute).
+No Ojoro helps buyers and sellers transact with greater confidence by
+providing a structured protected-transaction flow for payment, delivery,
+inspection and disputes. A buyer pays through the platform, money is held
+with a payment partner, the seller delivers, and the seller is **only**
+paid after the buyer accepts the item (or the inspection period passes
+without dispute).
 
-> Working name "DealSure" was renamed to **Deal Secure** per product
-> preference. The code identifiers still say `transactions`, and backend copy
-> uses configurable wording — never hard-coded claims of being an escrow
-> institution.
+> Former working names: **DealSure**, **Deal Secure**. No Ojoro is the
+> current product brand. The code identifiers still say `transactions`,
+> and backend copy uses configurable wording — never hard-coded claims of
+> being a licensed escrow provider or regulated escrow company.
 
 ## Stack
 
@@ -40,7 +42,7 @@ change under `src/convex/`.
 
 ## Package manager
 
-**npm** is the authoritative package manager for the active DealSure
+**npm** is the authoritative package manager for the active No Ojoro
 implementation (`packageManager: npm@10.9.3`, `package-lock.json`).
 A legacy `bun.lock` was removed because Bun is unavailable in the validated
 development environment and the stale Bun lockfile (missing test

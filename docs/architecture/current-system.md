@@ -4,8 +4,10 @@ Status: baseline audit of the existing implementation **as found**, before the
 Supabase migration. Everything here was verified against the repository
 (`git rev-parse HEAD` = commit `62a6a81`).
 
-> Working name: the product copy says **Deal Secure**; code identifiers and
-> docs still use `DealSure` / `transactions`. Both names refer to the same app.
+> Brand: the product is now **No Ojoro** (formerly developed under the working
+> names **DealSure** / **Deal Secure**); code identifiers and docs still use
+> `DealSure` / `transactions` in historical and compatibility-sensitive places.
+> All names refer to the same app.
 
 ---
 

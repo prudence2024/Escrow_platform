@@ -1,6 +1,12 @@
-# DealSure — Architecture
+# No Ojoro — Architecture
 
-DealSure is a transaction-protection platform for informal/social commerce. A
+> Canonical current brand: **No Ojoro**. Former working/product names:
+> **DealSure**, **Deal Secure**. Legacy internal identifiers may continue to
+> contain `dealsure` or `deal-sure` (database roles, provider ids, migration
+> history, cache keys, seed data) for compatibility and historical reasons —
+> they are not user-facing brand and must not be renamed without a compat plan.
+
+No Ojoro is a transaction-protection platform for informal/social commerce. A
 buyer pays through the platform, the seller delivers, and settlement happens
 only after release conditions are met.
 
@@ -23,7 +29,7 @@ The product is built on the Freebuff Web template:
 
 ## Key financial boundary
 
-**DealSure does not hold customer funds.** Real fund custody / controlled
+**No Ojoro does not hold customer funds.** Real fund custody / controlled
 settlement requires an integration with a licensed bank or payment partner.
 For this build we implement a **provider abstraction** (`PaymentProvider`)
 with a sandbox `MockPaymentProvider`. Product copy is configurable ("payment
@@ -59,3 +65,31 @@ never claim to be a licensed escrow institution.
   conditions are satisfied.
 - Automated release (inspection auto-accept) is a **scheduled backend decision**
   (cron), never a frontend timer.
+
+## Client platforms (No Ojoro)
+
+No Ojoro is intended for:
+
+- Web / PWA (current client: React 19 + Vite PWA in this repository)
+- Android / Google Play (future native app)
+- iOS / Apple App Store (future native app)
+
+No native mobile app exists yet. No Expo configuration exists yet. No
+Android package ID or iOS bundle ID has been chosen — store identifiers
+must be deliberately reserved before any mobile release, conceptually:
+
+- Android: `com.<organization>.nooj...` [NOT CHOSEN YET]
+- iOS: matching controlled bundle identifier [NOT CHOSEN YET]
+
+Existing technical application identifiers are NOT renamed merely because
+the display brand changed.
+
+All clients — web and future mobile — must call the trusted No Ojoro API:
+
+- Mobile apps must NOT receive `TURSO_AUTH_TOKEN`, database credentials,
+  payment-provider secrets, or server signing secrets.
+- Future mobile authentication should use secure platform-backed storage
+  (Keychain / Android Keystore-backed storage or equivalent).
+- Consequential actions (payment confirmation, settlement, refunds, dispute
+  resolution) remain server-authoritative; client state is never trusted
+  for money.

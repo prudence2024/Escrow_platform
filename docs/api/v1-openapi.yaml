@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: DealSure Server API
+  title: No Ojoro Server API
   version: 1.0.0
   description: >
     Trusted read foundation (Phase 4). Convex remains authoritative for all

@@ -1,4 +1,6 @@
-# DealSure â€” Security Decisions
+# No Ojoro â€” Security Decisions
+
+> Former working name: DealSure.
 
 Treat this as a financial transaction system.
 
@@ -54,9 +56,9 @@ Treat this as a financial transaction system.
   (`authRateLimits`, 10 failed/hr). OTP-send, invite-lookup, and IP-based
   limits are honestly DEFERRED (no stable server key in current paths).
 - Correction: the "evidence size/MIME validated server-side" line above
-  remains aspirational — `disputes.addEvidence` still accepts a URL with a
+  remains aspirational ï¿½ `disputes.addEvidence` still accepts a URL with a
   TODO scan. Real validation arrives with the private-storage presign flow
   (Phase 9). Do not rely on it today.
 - Delivery OTP P0 fixed (CSPRNG + HMAC digest + 10-min TTL); guest powers
   removed server-side; Freebuff JWT retired; step-up MFA honestly blocked
-  pending a capable authenticator. See Phase 2 report + authentication-decision.md §6.
+  pending a capable authenticator. See Phase 2 report + authentication-decision.md ï¿½6.

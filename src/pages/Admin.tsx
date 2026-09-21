@@ -30,7 +30,7 @@ export default function Admin() {
       <div className="rounded-3xl border bg-card p-10 text-center">
         <ShieldAlert className="mx-auto mb-3 size-8 text-destructive/60" />
         <h2 className="text-lg font-semibold">Operations access required</h2>
-        <p className="mt-1 text-sm text-muted-foreground">This area is for Deal Secure operations & admin staff only.</p>
+        <p className="mt-1 text-sm text-muted-foreground">This area is for No Ojoro operations & admin staff only.</p>
       </div>
     );
   }

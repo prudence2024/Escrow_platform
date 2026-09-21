@@ -1,7 +1,7 @@
 {
-  "name": "Deal Secure — Protected Payments",
-  "short_name": "Deal Secure",
-  "description": "Deal Secure protects transactions between buyers and sellers. Pay safely, deliver with confidence, and settle only when you're satisfied.",
+  "name": "No Ojoro — Protected Payments",
+  "short_name": "No Ojoro",
+  "description": "No Ojoro protects transactions between buyers and sellers. Pay safely, deliver with confidence, and settle only when you're satisfied.",
   "start_url": "/home",
   "display": "standalone",
   "orientation": "portrait",

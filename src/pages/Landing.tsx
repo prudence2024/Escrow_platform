@@ -76,8 +76,8 @@ export default function Landing() {
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link to="/" className="flex items-center gap-2">
-            <img src={logo} alt="Deal Secure" className="size-8 rounded-lg" />
-            <span className="font-semibold tracking-tight">Deal Secure</span>
+            <img src={logo} alt="No Ojoro" className="size-8 rounded-lg" />
+            <span className="font-semibold tracking-tight">No Ojoro</span>
           </Link>
           <Link to="/auth" className="text-sm font-medium text-muted-foreground hover:text-foreground">
             Sign in
@@ -102,7 +102,7 @@ export default function Landing() {
               <span className="block text-primary">Every deal protected.</span>
             </h1>
             <p className="mx-auto mt-5 max-w-xl text-base text-muted-foreground md:text-lg">
-              Deal Secure holds payment safely with our partner until you receive what
+              No Ojoro holds payment safely with our partner until you receive what
               you paid for — then the seller is paid, automatically.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -215,7 +215,7 @@ export default function Landing() {
       </section>
 
       <footer className="border-t border-border/60 py-8 text-center text-xs text-muted-foreground">
-        Deal Secure · protected transactions for social commerce
+        No Ojoro · protected transactions for social commerce
       </footer>
     </div>
   );
